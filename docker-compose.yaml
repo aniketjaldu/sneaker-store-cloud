@@ -1,0 +1,136 @@
+version: '3.8'
+
+services: 
+  user-db:
+    image: mysql:9.3
+    container_name: user-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: user_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: userpassword
+    ports:
+      - 3306:3306
+    volumes:
+      - user-db-data:/var/lib/mysql
+    networks:
+      user-network:
+      admin-network:
+
+  inventory-db:
+    image: mysql:9.3
+    container_name: inventory-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: inventory_db
+      MYSQL_USER: inventory
+      MYSQL_PASSWORD: inventorypassword
+    ports:
+      - 3307:3306
+    volumes:
+      - inventory-db-data:/var/lib/mysql
+    networks:
+      user-network:
+      admin-network:
+
+  user-service:
+    image: user-service:latest
+    container_name: user-service
+    ports:
+      - 8082:8080
+    networks:
+      user-network:
+      admin-network:
+
+  inventory-service:
+    image: inventory-service:latest
+    container_name: inventory-service
+    ports:
+      - 8083:8080
+    networks:
+      user-network:
+      admin-network:
+
+  user-bff1:
+    image: user-bff:latest
+    container_name: user-bff1
+    ports:
+      - 9600:9600
+    networks:
+      user-network:
+
+  user-bff2:
+    image: user-bff:latest
+    container_name: user-bff2
+    ports:
+      - 9601:9601
+    networks:
+      user-network:
+
+  admin-bff:
+    image: admin-bff:latest
+    container_name: admin-bff
+    ports:
+      - 9602:9602
+    networks:
+      admin-network:
+
+  admin-bff2:
+    image: admin-bff:latest
+    container_name: admin-bff2
+    ports:
+      - 9603:9603
+    networks:
+      admin-network:
+
+  user-lb:
+    image: nginx:latest
+    container_name: user-lb
+    ports:
+      - 8080:80
+    networks:
+      user-network:
+    depends_on:
+      - user-bff1
+      - user-bff2
+    volumes:
+      - ../nginx/user-lb.conf:/etc/nginx/conf.d/default.conf
+
+  admin-lb:
+    image: nginx:latest
+    container_name: admin-lb
+    ports:
+      - 8081:80
+    networks:
+      admin-network:
+    depends_on:
+      - admin-bff
+      - admin-bff2
+    volumes:
+      - ../nginx/admin-lb.conf:/etc/nginx/conf.d/default.conf
+
+  idp-service:
+    image: idp-service:latest
+    container_name: idp-service
+    ports:
+      - 8084:8080
+    networks:
+      user-network:
+      admin-network:
+
+  email-service:
+    image: boky/postfix:latest
+    container_name: email-service
+    restart: always
+    ports:
+      - "1587:587"
+    environment:
+      ALLOWED_SENDER_DOMAINS: wit.edu
+      HOSTNAME: mail.sneaker.local
+    volumes:
+      - postfix_data:/var/spool/postfix
+
+volumes:
+  user-db-data:
+  inventory-db-data:
+  postfix_data:
