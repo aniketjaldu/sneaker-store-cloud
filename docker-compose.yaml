@@ -63,7 +63,7 @@ services:
     image: user-bff:latest
     container_name: user-bff2
     ports:
-      - 9601:9601
+      - 9601:9600
     networks:
       user-network:
 
@@ -71,7 +71,7 @@ services:
     image: admin-bff:latest
     container_name: admin-bff
     ports:
-      - 9602:9602
+      - 9602:9600
     networks:
       admin-network:
 
@@ -79,7 +79,7 @@ services:
     image: admin-bff:latest
     container_name: admin-bff2
     ports:
-      - 9603:9603
+      - 9603:9600
     networks:
       admin-network:
 
