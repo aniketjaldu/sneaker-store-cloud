@@ -22,20 +22,12 @@ CREATE TABLE products (
   product_code       VARCHAR(10)    NOT NULL      UNIQUE,
   product_name       VARCHAR(255)   NOT NULL,
   description        TEXT           DEFAULT NULL,
-  list_price         DECIMAL(10,2)  NOT NULL,
+  market_price         DECIMAL(10,2)  NOT NULL,
   discount_percent   DECIMAL(10,2)  NOT NULL      DEFAULT 0.00,
   date_added         DATETIME       DEFAULT NULL,
   CONSTRAINT products_fk_brands
     FOREIGN KEY (brand_id)
     REFERENCES brands (brand_id)
-);
-
-CREATE TABLE administrators (
-  admin_id           INT            PRIMARY KEY   AUTO_INCREMENT,
-  email_address      VARCHAR(255)   NOT NULL,
-  password           VARCHAR(255)   NOT NULL,
-  first_name         VARCHAR(255)   NOT NULL,
-  last_name          VARCHAR(255)   NOT NULL
 );
 
 
@@ -53,7 +45,7 @@ INSERT INTO brands (brand_id, brand_name) VALUES
 
 -- Sneakers
 -- Nike
-INSERT INTO products (brand_id, product_code, product_name, description, list_price, discount_percent, date_added) VALUES
+INSERT INTO products (brand_id, product_code, product_name, description, market_price, discount_percent, date_added) VALUES
 (1, 'AF1', 'Air Force 1', 'Classic white low-top sneaker', 109.99, 30.00, '2025-07-18 09:32:40'),
 (1, 'AM90', 'Air Max 90', 'Retro running-inspired design', 129.99, 20.00, '2025-07-17 14:12:10'),
 (1, 'DUNK', 'Nike Dunk Low', 'Iconic court silhouette', 114.99, 15.00, '2025-07-16 11:45:22'),
@@ -80,12 +72,21 @@ INSERT INTO products (brand_id, product_code, product_name, description, list_pr
 (5, 'YZFMR', 'Yeezy Foam Runner', 'Futuristic one-piece design', 89.99, 7.00, '2025-07-15 06:00:00');
 
 
+
+CREATE TABLE administrators (
+  admin_id           INT            PRIMARY KEY   AUTO_INCREMENT,
+  email_address      VARCHAR(255)   NOT NULL,
+  password           VARCHAR(255)   NOT NULL,
+  first_name         VARCHAR(255)   NOT NULL,
+  last_name          VARCHAR(255)   NOT NULL
+);
+
 INSERT INTO administrators (admin_id, email_address, password, first_name, last_name) VALUES
-(1, 'admin@sneakershop.com', '6a718fbd768c2378b511f8249b54897f940e9022', 'Admin', 'User'),
+(1, 'admin@sneakerspot.com', '6a718fbd768c2378b511f8249b54897f940e9022', 'Admin', 'User'),
 (2, 'vaughn@ss.com', '971e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Jovaughn', 'O'),
-(2, 'denis@ss.com', '971e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Denis', 'L'),
-(2, 'aniketpatel@ss.com', '971e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Aniket', 'J'),
-(3, 'timmy@ss.com', '3f2975c819cefc686282456aeae3a137bf896ee8', 'Timmy', 'T');
+(3, 'denis@ss.com', '974e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Denis', 'L'),
+(4, 'aniket@ss.com', '976e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Aniket', 'J'),
+(5, 'timmy@ss.com', '3f2975c819cefc686282456aeae3a137bf896ee8', 'Timmy', 'T');
 
 -- Create a user named mgs_user
 CREATE USER IF NOT EXISTS mgs_user@localhost
