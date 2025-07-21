@@ -50,3 +50,54 @@ CREATE TABLE payment_methods (
     FOREIGN KEY (user_id) REFERENCES users (user_id),
     FOREIGN KEY(billing_address_id) REFERENCES addresses (address_id)
 );
+
+/********************************************************
+ *                      INSERTS                         *
+ ********************************************************/
+INSERT INTO 
+    users (
+        user_id, 
+        first_name, 
+        last_name, 
+        email, 
+        password, 
+        shipping_address_id, 
+        billing_address_id
+    ) 
+VALUES
+    (
+        1,
+        'Aniket',
+        'Jaldu',
+        'jaldua@wit.edu'
+        '6a718fbd768c2378b511f8249b54897f940e9022',
+        1,
+        1
+    ),
+    (
+        2,
+        'Denis',
+        'Le',
+        'led11@wit.edu'
+        '971e95957d3b74d70d79c20c94e9cd91b85f7aae',
+        2,
+        2
+    ),
+    (
+        3,
+        'Jovaughn',
+        'Oliver',
+        'oliverj@wit.edu'
+        '974e95957d3b74d70d79c20c94e9cd91b85f7aae',
+        3,
+        3
+    )
+    (
+        4,
+        'Timmy',
+        'Tran'
+        'ttran@wit.edu',
+        '3f2975c819cefc686282456aeae3a137bf896ee8',
+        4,
+        4
+    )
