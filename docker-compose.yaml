@@ -25,6 +25,7 @@ services:
       - 3306:3306
     volumes:
       - user-db-data:/var/lib/mysql
+      - ../db_user/create-script.sql:/docker-entrypoint-initdb.d/create-script.sql
     networks:
       user-network:
       admin-network:
@@ -41,6 +42,7 @@ services:
       - 3307:3306
     volumes:
       - inventory-db-data:/var/lib/mysql
+      - ../db_inventory/create-script.sql:/docker-entrypoint-initdb.d/create-script.sql
     networks:
       user-network:
       admin-network:
