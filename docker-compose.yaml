@@ -83,7 +83,7 @@ services:
 
   admin-bff:
     image: admin-bff:latest
-    container_name: admin-bff
+    container_name: admin-bff1
     ports:
       - 9602:9600
     networks:
