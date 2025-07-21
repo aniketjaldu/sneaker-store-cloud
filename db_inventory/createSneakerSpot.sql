@@ -30,6 +30,10 @@ CREATE TABLE products (
     REFERENCES brands (brand_id)
 );
 
+CREATE TABLE orders (
+  
+)
+
 
 /********************************************************
  *                      INSERTS                         *
@@ -70,29 +74,3 @@ INSERT INTO products (brand_id, product_code, product_name, description, market_
 (5, 'YZ700', 'Yeezy 700 Wave Runner', 'Dad-shoe style with Boost', 299.99, 10.00, '2025-07-17 09:45:00'),
 (5, 'YZSLD', 'Yeezy Slide', 'Minimalist foam sandal', 69.99, 0.00, '2025-07-16 07:20:00'),
 (5, 'YZFMR', 'Yeezy Foam Runner', 'Futuristic one-piece design', 89.99, 7.00, '2025-07-15 06:00:00');
-
-
-
-CREATE TABLE administrators (
-  admin_id           INT            PRIMARY KEY   AUTO_INCREMENT,
-  email_address      VARCHAR(255)   NOT NULL,
-  password           VARCHAR(255)   NOT NULL,
-  first_name         VARCHAR(255)   NOT NULL,
-  last_name          VARCHAR(255)   NOT NULL
-);
-
-INSERT INTO administrators (admin_id, email_address, password, first_name, last_name) VALUES
-(1, 'admin@sneakerspot.com', '6a718fbd768c2378b511f8249b54897f940e9022', 'Admin', 'User'),
-(2, 'vaughn@ss.com', '971e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Jovaughn', 'O'),
-(3, 'denis@ss.com', '974e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Denis', 'L'),
-(4, 'aniket@ss.com', '976e95957d3b74d70d79c20c94e9cd91b85f7aae', 'Aniket', 'J'),
-(5, 'timmy@ss.com', '3f2975c819cefc686282456aeae3a137bf896ee8', 'Timmy', 'T');
-
--- Create a user named mgs_user
-CREATE USER IF NOT EXISTS mgs_user@localhost
-IDENTIFIED BY 'pa55word';
-
--- Grant privileges to that user
-GRANT SELECT, INSERT, UPDATE, DELETE, DROP, CREATE VIEW, EXECUTE
-ON SneakerSpot.*
-TO mgs_user@localhost;
