@@ -17,7 +17,9 @@ CREATE TABLE users (
     email                   VARCHAR(255)    NOT NULL UNIQUE,
     password                VARCHAR(60)     NOT NULL,
     shipping_address_id     INT             DEFAULT NULL,
-    billing_address_id      INT             DEFAULT NULL
+    billing_address_id      INT             DEFAULT NULL,
+    FOREIGN KEY (shipping_address_id) REFERENCES addresses (address_id),
+    FOREIGN KEY (billing_address_id) REFERENCES addresses (address_id)
 );
 
 CREATE TABLE user_roles (
@@ -28,7 +30,6 @@ CREATE TABLE user_roles (
 
 CREATE TABLE addresses (
     address_id              INT             PRIMARY KEY     AUTO_INCREMENT,
-    user_id                 INT             NOT NULL,
     line1                   VARCHAR(60)     NOT NULL,
     line2                   VARCHAR(60)     DEFAULT NULL,
     city                    VARCHAR(40)     NOT NULL,
@@ -36,7 +37,6 @@ CREATE TABLE addresses (
     zip_code                VARCHAR(10)     NOT NULL,
     phone                   VARCHAR(12)     NOT NULL,
     disabled                TINYINT(1)      NOT NULL DEFAULT 0,
-    FOREIGN KEY (user_id) REFERENCES users (user_id)
 );
 
 CREATE TABLE payment_methods (
