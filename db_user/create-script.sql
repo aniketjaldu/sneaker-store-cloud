@@ -58,13 +58,23 @@ INSERT INTO users (user_id, first_name, last_name, email, password, shipping_add
     (1, 'Aniket', 'Jaldu', 'jaldua@wit.edu', '6a718fbd768c2378b511f8249b54897f940e9022', 1, 1),
     (2, 'Denis', 'Le', 'led11@wit.edu', '971e95957d3b74d70d79c20c94e9cd91b85f7aae', 2, 2),
     (3, 'Jovaughn', 'Oliver', 'oliverj@wit.edu', '974e95957d3b74d70d79c20c94e9cd91b85f7aae', 3, 3),
-    (4, 'Timmy', 'Tran', 'ttran@wit.edu', '3f2975c819cefc686282456aeae3a137bf896ee8', 4, 4);
+    (4, 'Timmy', 'Tran', 'ttran@wit.edu', '3f2975c819cefc686282456aeae3a137bf896ee8', 4, 4),
+    (5, 'Alice', 'Johnson', 'alice.johnson@example.com', 'hashedpassword1', 1, 1),
+    (6, 'Bob', 'Smith', 'bob.smith@example.com', 'hashedpassword2', 2, 2),
+    (7, 'Carol', 'Davis', 'carol.davis@example.com', 'hashedpassword3', 3, 3),
+    (8, 'David', 'Lee', 'david.lee@example.com', 'hashedpassword4', 4, 4),
+    (9, 'Emma', 'Martinez', 'emma.martinez@example.com', 'hashedpassword5', 5, 5);
 
 INSERT INTO user_roles (user_id, role) VALUES
     (1, 'admin'),
     (2, 'admin'),
     (3, 'admin'),
-    (4, 'admin');
+    (4, 'admin'),
+    (5, 'customer'),
+    (6, 'customer'),
+    (7, 'customer'),
+    (8, 'customer'),
+    (9, 'customer');
 
 INSERT INTO addresses (address_id, line1, line2, city, state, zip_code, phone, disabled) VALUES
     (1, '123 Main St', 'Apt 4B', 'Springfield', 'IL', '62704', '217-555-1234', 0),
@@ -74,8 +84,8 @@ INSERT INTO addresses (address_id, line1, line2, city, state, zip_code, phone, d
     (5, '654 Birch Blvd', 'Unit 5', 'Portland', 'OR', '97205', '503-555-7890', 1);
 
 INSERT INTO payment_methods (payment_method_id, user_id, billing_address_id, card_last_four, card_type, expiration_month, expiration_year) VALUES
-    (1, 10, 1, '4242', 'Visa', 12, 2027),
-    (2, 11, 2, '1111', 'MasterCard', 6, 2026),
-    (3, 12, 3, '5678', 'Amex', 3, 2028),
-    (4, 13, 4, '9999', 'Discover', 9, 2025),
-    (5, 14, 5, '3456', 'Visa', 1, 2029);
+    (1, 1, 1, '4242', 'Visa', 12, 2027),
+    (2, 2, 2, '1111', 'MasterCard', 6, 2026),
+    (3, 3, 3, '5678', 'Amex', 3, 2028),
+    (4, 5, 4, '9999', 'Discover', 9, 2025),
+    (5, 5, 5, '3456', 'Visa', 1, 2029);
