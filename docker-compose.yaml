@@ -1,4 +1,16 @@
-version: '3.8'
+###########################
+# PORTS
+# 8080: User LB
+# 8081: Admin LB
+# 8082: User Service
+# 8083: Inventory Service
+# 8084: IDP Service
+# 9600: User BFF
+# 9601: User BFF2
+# 9602: Admin BFF
+# 9603: Admin BFF2
+# 1587: Email Service
+###########################
 
 services: 
   user-db:
@@ -134,3 +146,7 @@ volumes:
   user-db-data:
   inventory-db-data:
   postfix_data:
+
+networks:
+  user-network:
+  admin-network:
