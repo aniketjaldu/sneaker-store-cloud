@@ -9,5 +9,5 @@ def read_root():
 
 @app.get("/users")
 def get_user_info():
-    response = requests.get("http://localhost:8082/users")
+    response = requests.get("http://user-service:8080/users")
     return response.json()
