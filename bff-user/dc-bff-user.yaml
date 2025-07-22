@@ -1,0 +1,24 @@
+services:
+  bff-user1:
+    build:
+      context: ..
+      dockerfile: bff-user/Dockerfile
+    container_name: bff-user1
+    ports:
+      - 9600:9600
+    networks:
+      - user-network
+      - admin-network
+  bff-user2:
+    build:
+      context: ..
+      dockerfile: bff-user/Dockerfile
+    container_name: bff-user2
+    ports:
+      - 9601:9600
+    networks:
+      - user-network
+      - admin-network
+networks:
+  user-network:
+  admin-network:  
