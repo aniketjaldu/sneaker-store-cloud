@@ -1,12 +1,14 @@
+
 import mysql.connector
 
 def get_product_info(product_id):
     try:
         conn = mysql.connector.connect(
             host="localhost",
-            user="username",       
-            password="password",
-            database="inventory_database"
+            user="root",       
+            password="inventorypassword",
+            database="inventory_database",
+            port="3307"
         )
         cursor = conn.cursor()
         query = """
