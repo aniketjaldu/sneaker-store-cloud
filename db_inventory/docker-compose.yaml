@@ -4,9 +4,9 @@ services:
     ports:
       - 3307:3307
     environment:
-      MYSQL_ROOT_PASSWORD: userpassword
+      MYSQL_ROOT_PASSWORD: password
     volumes:
-      - db-user-data:/var/lib/mysql
+      - inventory_db-data:/var/lib/mysql
       - ./create-script.sql:/docker-entrypoint-initdb.d/create-script.sql
 
 volumes:
