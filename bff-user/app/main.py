@@ -148,8 +148,34 @@ def get_product_details(product_id: int):
 @app.get("/cart")
 def get_cart(user_id: int = Query(...)):
     try:
-        response = requests.get(f"http://user-service:8080/users/{user_id}/cart")
-        return response.json()
+        # Get cart from user service
+        cart_response = requests.get(f"http://user-service:8080/users/{user_id}/cart")
+        if cart_response.status_code != 200:
+            return cart_response.json()
+        
+        cart_items = cart_response.json()
+        
+        for item in cart_items if isinstance(cart_items, list) else [cart_items]:
+            if "product_id" in item:
+                try:
+                    # Get product details from inventory service
+                    product_response = requests.get(f"http://inventory-service:8080/products/{item['product_id']}")
+                    if product_response.status_code == 200:
+                        product_data = product_response.json()
+                        # Merge product details into cart item
+                        item.update({
+                            "product_name": product_data.get("product_name"),
+                            "product_code": product_data.get("product_code"),
+                            "description": product_data.get("description"),
+                            "brand_name": product_data.get("brand_name"),
+                            "market_price": product_data.get("market_price"),
+                            "discount_percent": product_data.get("discount_percent", 0),
+                            "current_price": product_data.get("market_price", 0) * (1 - product_data.get("discount_percent", 0) / 100)
+                        })
+                except requests.RequestException:
+                    pass
+        
+        return cart_items
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
 
@@ -174,8 +200,67 @@ def remove_from_cart(user_id: int = Query(...), product_id: int = Query(...)):
 @app.get("/orders")
 def get_user_orders(user_id: int = Query(...)):
     try:
-        response = requests.get(f"http://user-service:8080/users/{user_id}/orders")
-        return response.json()
+        # Get orders from user service
+        orders_response = requests.get(f"http://user-service:8080/users/{user_id}/orders")
+        if orders_response.status_code != 200:
+            return orders_response.json()
+        
+        orders = orders_response.json()
+        
+        for order in orders if isinstance(orders, list) else [orders]:
+            if "items" in order:
+                for item in order["items"]:
+                    if "product_id" in item:
+                        try:
+                            # Get product details from inventory service
+                            product_response = requests.get(f"http://inventory-service:8080/products/{item['product_id']}")
+                            if product_response.status_code == 200:
+                                product_data = product_response.json()
+                                # Merge product details into order item
+                                item.update({
+                                    "product_name": product_data.get("product_name"),
+                                    "product_code": product_data.get("product_code"),
+                                    "description": product_data.get("description"),
+                                    "brand_name": product_data.get("brand_name"),
+                                    "market_price": product_data.get("market_price")
+                                })
+                        except requests.RequestException:
+                            pass
+        
+        return orders
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="User service unavailable")
+
+@app.get("/orders/{order_id}")
+def get_order_details(order_id: int, user_id: int = Query(...)):
+    try:
+        # Get order from user service
+        order_response = requests.get(f"http://user-service:8080/users/{user_id}/orders/{order_id}")
+        if order_response.status_code != 200:
+            return order_response.json()
+        
+        order = order_response.json()
+        
+        if "items" in order:
+            for item in order["items"]:
+                if "product_id" in item:
+                    try:
+                        # Get product details from inventory service
+                        product_response = requests.get(f"http://inventory-service:8080/products/{item['product_id']}")
+                        if product_response.status_code == 200:
+                            product_data = product_response.json()
+                            # Merge product details into order item
+                            item.update({
+                                "product_name": product_data.get("product_name"),
+                                "product_code": product_data.get("product_code"),
+                                "description": product_data.get("description"),
+                                "brand_name": product_data.get("brand_name"),
+                                "market_price": product_data.get("market_price")
+                            })
+                    except requests.RequestException:
+                        pass
+        
+        return order
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
 

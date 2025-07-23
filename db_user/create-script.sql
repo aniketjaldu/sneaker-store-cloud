@@ -51,6 +51,44 @@ CREATE TABLE payment_methods (
     FOREIGN KEY(billing_address_id) REFERENCES addresses (address_id)
 );
 
+CREATE TABLE orders (
+    order_id                INT             PRIMARY KEY     AUTO_INCREMENT,
+    user_id                 INT             NOT NULL,
+    order_date              DATETIME        NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+    shipping_address_id     INT             DEFAULT NULL,
+    billing_address_id      INT             DEFAULT NULL,
+    email                   VARCHAR(255)    NOT NULL,
+    total_amount            DECIMAL(10,2)   NOT NULL,
+    order_status            ENUM('pending', 'processing', 'shipped', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
+    payment_method_id       INT             DEFAULT NULL,
+    FOREIGN KEY (user_id) REFERENCES users (user_id),
+    FOREIGN KEY (shipping_address_id) REFERENCES addresses (address_id),
+    FOREIGN KEY (billing_address_id) REFERENCES addresses (address_id),
+    FOREIGN KEY (payment_method_id) REFERENCES payment_methods (payment_method_id)
+);
+
+CREATE TABLE order_items (
+    order_item_id           INT             PRIMARY KEY     AUTO_INCREMENT,
+    order_id                INT             NOT NULL,
+    product_id              INT             NOT NULL,
+    quantity                INT             NOT NULL        DEFAULT 1,
+    unit_price              DECIMAL(10,2)   NOT NULL,
+    total_price             DECIMAL(10,2)   NOT NULL,
+    FOREIGN KEY (order_id) REFERENCES orders (order_id) ON DELETE CASCADE
+);
+
+CREATE TABLE shopping_cart (
+    cart_id                 INT             PRIMARY KEY     AUTO_INCREMENT,
+    user_id                 INT             NOT NULL,
+    product_id              INT             NOT NULL,
+    quantity                INT             NOT NULL        DEFAULT 1,
+    added_date              DATETIME        NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (user_id),
+    UNIQUE KEY unique_user_product (user_id, product_id)
+    -- Note: product_id references inventory_database.products, but cross-database foreign keys
+    -- are not supported in MySQL, so this will be enforced at application level
+);
+
 /********************************************************
  *                      INSERTS                         *
  ********************************************************/
@@ -89,3 +127,20 @@ INSERT INTO payment_methods (payment_method_id, user_id, billing_address_id, car
     (3, 3, 3, '5678', 'Amex', 3, 2028),
     (4, 5, 4, '9999', 'Discover', 9, 2025),
     (5, 5, 5, '3456', 'Visa', 1, 2029);
+
+-- Sample orders
+INSERT INTO orders (order_id, user_id, order_date, shipping_address_id, billing_address_id, email, total_amount, order_status, payment_method_id) VALUES
+    (1, 5, '2024-01-15 10:30:00', 1, 1, 'alice.johnson@example.com', 129.99, 'delivered', 1),
+    (2, 6, '2024-01-20 14:15:00', 2, 2, 'bob.smith@example.com', 179.99, 'shipped', 2),
+    (3, 7, '2024-01-25 09:45:00', 3, 3, 'carol.davis@example.com', 99.99, 'processing', 3);
+
+-- Sample order items
+INSERT INTO order_items (order_item_id, order_id, product_id, quantity, unit_price, total_price) VALUES
+    (1, 1, 2, 1, 129.99, 129.99),  -- Air Max 90
+    (2, 2, 5, 1, 179.99, 179.99),  -- Ultraboost 22
+    (3, 3, 6, 1, 99.99, 99.99);    -- Samba OG
+
+-- Sample shopping cart items
+INSERT INTO shopping_cart (cart_id, user_id, product_id, quantity, added_date) VALUES
+    (1, 8, 1, 2, '2024-01-26 11:00:00'),  -- David has 2 Air Force 1s in cart
+    (2, 9, 3, 1, '2024-01-26 15:30:00');  -- Emma has 1 Nike Dunk Low in cart
