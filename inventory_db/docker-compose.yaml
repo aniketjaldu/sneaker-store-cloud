@@ -1,8 +1,8 @@
 services:
-  db-user:
+  inventory_db:
     image: mysql:9.3
     ports:
-      - 3307:3307
+      - 3308:3307
     environment:
       MYSQL_ROOT_PASSWORD: password
     volumes:
