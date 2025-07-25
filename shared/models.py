@@ -10,12 +10,18 @@ def connect_to_db(host, user, password, database, port):
         autocommit=True
     )
 
-def query_db(conn, query):
+def query_db(conn, query, params=None):
     cursor = conn.cursor()
-    cursor.execute(query)
+    cursor.execute(query, params or ())
     result = cursor.fetchall()
     cursor.close()
     return result
+
+def execute_db(conn, query, params=None):
+    cursor = conn.cursor()
+    cursor.execute(query, params or ())
+    conn.commit()
+    cursor.close()
 
 def close_db(conn):
     conn.close()

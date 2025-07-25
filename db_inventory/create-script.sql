@@ -31,16 +31,11 @@ CREATE TABLE products (
 );
 
 CREATE TABLE orders (
-  order_id                INT             PRIMARY KEY,
-  user_id                 INT             NOT NULL,
-  order_date              DATETIME        NOT NULL,
-  shipping_address_id     INT             DEFAULT NULL,
-  billing_address_id      INT             DEFAULT NULL,
-  email                   VARCHAR(255)    NOT NULL UNIQUE,
-  total_amount            DECIMAL(10,2)   NOT NULL,
-  product                 INT
+    order_id      INT AUTO_INCREMENT    PRIMARY KEY,
+    product_id    INT,
+    quantity      INT,
+    order_date    TIMESTAMP             DEFAULT CURRENT_TIMESTAMP
 );
-
 
 /********************************************************
  *                      INSERTS                         *
