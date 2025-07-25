@@ -9,7 +9,7 @@ def read_root():
 
 @app.get("/users")
 def get_user_info():
-    conn = connect_to_db("user-db", "root", "userpassword", "user_database")
+    conn = connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
     query = f"SELECT * FROM users"
     result = query_db(conn, query)
     close_db(conn)

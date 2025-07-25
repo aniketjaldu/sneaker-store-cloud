@@ -41,7 +41,6 @@ CREATE TABLE orders (
  *                      INSERTS                         *
  ********************************************************/
 
--- Brands
 INSERT INTO brands (brand_id, brand_name) VALUES
 (1, 'Nike'),
 (2, 'Adidas'),
@@ -49,9 +48,8 @@ INSERT INTO brands (brand_id, brand_name) VALUES
 (4, 'New Balance'),
 (5, 'Yeezy');
 
--- Sneakers
--- Nike
 INSERT INTO products (product_id, brand_id, product_name, description, market_price, discount_percent, quantity, date_added) VALUES
+-- Nike
 (1, 1, 'Air Force 1', 'Classic white low-top sneaker', 109.99, 30.00, 50, '2025-07-18 09:32:40'),
 (2, 1, 'Air Max 90', 'Retro running-inspired design', 129.99, 20.00, 40, '2025-07-17 14:12:10'),
 (3, 1, 'Nike Dunk Low', 'Iconic court silhouette', 114.99, 15.00, 35, '2025-07-16 11:45:22'),
@@ -70,9 +68,4 @@ INSERT INTO products (product_id, brand_id, product_name, description, market_pr
 (13, 4, '990v5', 'Made in USA lifestyle runner', 184.99, 12.00, 38, '2025-07-18 11:11:11'),
 (14, 4, '550 White/Green', 'Retro basketball silhouette', 109.99, 15.00, 27, '2025-07-17 08:32:20'),
 (15, 4, '327 Navy', 'Modern twist on vintage running', 99.99, 10.00, 32, '2025-07-16 10:00:00'),
-(16, 4, '9060 Grey', 'Chunky futuristic sneaker', 149.99, 18.00, 34, '2025-07-15 13:30:00'),
--- Yeezy
-(17, 5, 'Yeezy Boost 350 V2', 'Primeknit + Boost comfort', 229.99, 5.00, 44, '2025-07-18 14:00:00'),
-(18, 5, 'Yeezy 700 Wave Runner', 'Dad-shoe style with Boost', 299.99, 10.00, 18, '2025-07-17 09:45:00'),
-(19, 5, 'Yeezy Slide', 'Minimalist foam sandal', 69.99, 0.00, 55, '2025-07-16 07:20:00'),
-(20, 5, 'Yeezy Foam Runner', 'Futuristic one-piece design', 89.99, 7.00, 29, '2025-07-15 06:00:00');
+(16, 4, '9060 Grey', 'Chunky futuristic sneaker', 149.99, 18.00, 34, '2025-07-15 13:30:00');
