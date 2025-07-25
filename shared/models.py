@@ -1,11 +1,12 @@
 import mysql.connector
 
-def connect_to_db(host, user, password, database):
+def connect_to_db(host, user, password, database, port):
     return mysql.connector.connect(
         host=host,
         user=user,
         password=password,
         database=database,
+        port=port,
         autocommit=True
     )
 
