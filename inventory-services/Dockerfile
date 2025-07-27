@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy the current directory into the container
 COPY inventory-services/ /app/
 
+# Copy the shared directory
+COPY shared/ /app/shared/
+
 # Install the dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
