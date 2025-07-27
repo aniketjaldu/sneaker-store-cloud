@@ -1,5 +1,8 @@
 ###########################
 # PORTS
+# 1587: Email Service
+# 3306: User Database
+# 3307: Inventory Database
 # 8080: User LB
 # 8081: Admin LB
 # 8082: User Service
@@ -8,8 +11,7 @@
 # 9600: User BFF
 # 9601: User BFF2
 # 9602: Admin BFF
-# 9603: Admin BFF2
-# 1587: Email Service
+# 9603: Admin BFF2 
 ###########################
 
 services: 

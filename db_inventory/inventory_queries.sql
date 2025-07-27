@@ -1,3 +1,4 @@
+-- See current pricing on sneakers
 SELECT 
   b.brand_name,
   p.product_name,
@@ -11,4 +12,15 @@ JOIN
 ORDER BY 
   b.brand_name ASC,
   p.product_name ASC;
+
+
+-- See products and quantities
+SELECT 
+  product_id, 
+  product_name, 
+  market_price AS price, 
+  quantity
+FROM products
+ORDER BY product_id;
+
 
