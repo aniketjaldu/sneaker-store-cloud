@@ -8,7 +8,7 @@ app = fastapi.FastAPI()
 
 # Helper function to connect to db
 def connect():
-    return connect_to_db("user-db", "root", "userpassword", "user_database")
+    return connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
 
 @app.get("/")
 def read_root():
@@ -16,7 +16,7 @@ def read_root():
 
 @app.get("/users")
 def get_user_info():
-    conn = connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
+    conn = connect()
     query = f"SELECT * FROM users"
     result = query_db(conn, query)
     close_db(conn)
