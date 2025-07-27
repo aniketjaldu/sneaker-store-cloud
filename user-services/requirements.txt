@@ -1,3 +1,5 @@
 fastapi
 mysql-connector-python
 uvicorn
+requests
+pydantic

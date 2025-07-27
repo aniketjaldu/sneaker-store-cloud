@@ -22,10 +22,19 @@ def get_user_info():
     close_db(conn)
     return result
 
-@app.get("/profile")
+# GET /profile
+@app.get("/users/{user_id}")
 async def get_user_profile(user_id: int):
-    conn = connect()
-    query = "SELECT * FROM users WHERE user_id = %s"
-    result = query_db(conn, query, (user_id,))
-    close_db(conn)
-    return result
+    try:   
+        conn = connect()
+        query = "SELECT * FROM users WHERE user_id = %s"
+        result = query_db(conn, query, (user_id,))
+        close_db(conn)
+
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
+    
+        return result[0]
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
