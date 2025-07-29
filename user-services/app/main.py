@@ -14,6 +14,7 @@ def connect_user_db():
 def connect_inventory_db():
     return connect_to_db("inventory-db", "root", "inventorypassword", "inventory_database", "3306")
 
+# ========== USER ROUTES ==========
 @app.get("/")
 def read_root():
     return {"message": "Hello, World!"}
@@ -61,6 +62,48 @@ async def update_user_profile(user_id: int, request: Request):
         close_db(conn)
 
         return {"message": "User profile updated successfully"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# ========== ADMIN ROUTES ==========
+@app.get("/admin/users")
+async def get_all_users(
+    role: Optional[str] = Query(None, description="Filter by role: customer or admin"),
+    search: Optional[str] = Query(None, description="Search by name or email"),
+    limit: Optional[int] = Query(50, description="Number of results to return"),
+    offset: Optional[int] = Query(0, description="Number of results to skip")
+):
+    try:
+        conn = connect_user_db()
+        query = "SELECT * FROM users"
+        filter = []
+        params = []
+
+        if role:
+            filter.append("role = %s")
+            params.append(role)
+
+        if search:
+            filter.append("""
+                        (
+                        LOWER(first_name) LIKE LOWER(%s) OR
+                        LOWER(last_name) LIKE LOWER(%s) OR
+                        LOWER(email) LIKE LOWER(%s)
+                        )
+                        """)
+            search_value = f"%{search}%"
+            params.extend([search_value, search_value, search_value])
+
+        if filter:
+            query += " WHERE " + " AND ".join(filter)
+
+        query += " LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+
+        result = query_db(conn, query, tuple(params))
+        close_db(conn)
+        return result
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
