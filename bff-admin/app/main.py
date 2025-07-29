@@ -1,6 +1,6 @@
 import fastapi
 import requests
-from fastapi import HTTPException, Query
+from fastapi import HTTPException, Query, Header, Depends
 from typing import Optional, List
 from pydantic import BaseModel
 
@@ -29,6 +29,31 @@ class ProductCreateRequest(BaseModel):
 class BrandCreateRequest(BaseModel):
     brand_name: str
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+# Authentication dependency
+async def get_current_admin(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    
+    try:
+        # Call IDP to verify token
+        response = requests.post("http://idp-service:8080/verify", 
+                               headers={"Authorization": authorization})
+        
+        if response.status_code == 200:
+            user_data = response.json()
+            # Verify admin role
+            if user_data.get("role") != "admin":
+                raise HTTPException(status_code=403, detail="Admin access required")
+            return user_data
+        else:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+            
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+
 # Health check
 @app.get("/")
 def read_root():
@@ -44,10 +69,20 @@ def admin_login(login_data: AdminLoginRequest):
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
-@app.post("/auth/logout")
-def admin_logout():
+@app.post("/auth/refresh")
+def refresh_token(refresh_data: RefreshRequest):
     try:
-        response = requests.post("http://idp-service:8080/admin/logout")
+        # Call IDP service for token refresh
+        response = requests.post("http://idp-service:8080/refresh", json=refresh_data.dict())
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+
+@app.post("/auth/logout")
+def admin_logout(authorization: str = Header(None)):
+    try:
+        response = requests.post("http://idp-service:8080/logout", 
+                               headers={"Authorization": authorization})
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
@@ -58,7 +93,8 @@ def get_all_users(
     role: Optional[str] = Query(None, description="Filter by role: customer or admin"),
     search: Optional[str] = Query(None, description="Search by name or email"),
     limit: Optional[int] = Query(50, description="Number of results to return"),
-    offset: Optional[int] = Query(0, description="Number of results to skip")
+    offset: Optional[int] = Query(0, description="Number of results to skip"),
+    current_admin: dict = Depends(get_current_admin)
 ):
     try:
         params = {
@@ -75,7 +111,7 @@ def get_all_users(
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.get("/users/{user_id}")
-def get_user_details(user_id: int):
+def get_user_details(user_id: int, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.get(f"http://user-service:8080/admin/users/{user_id}")
         return response.json()
@@ -83,7 +119,7 @@ def get_user_details(user_id: int):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.post("/users")
-def create_user(user_data: UserCreateRequest):
+def create_user(user_data: UserCreateRequest, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.post("http://user-service:8080/admin/users", json=user_data.dict())
         return response.json()
@@ -91,7 +127,7 @@ def create_user(user_data: UserCreateRequest):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.put("/users/{user_id}")
-def update_user(user_id: int, user_data: dict):
+def update_user(user_id: int, user_data: dict, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.put(f"http://user-service:8080/admin/users/{user_id}", json=user_data)
         return response.json()
@@ -99,7 +135,7 @@ def update_user(user_id: int, user_data: dict):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.delete("/users/{user_id}")
-def delete_user(user_id: int):
+def delete_user(user_id: int, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.delete(f"http://user-service:8080/admin/users/{user_id}")
         return response.json()
@@ -107,10 +143,9 @@ def delete_user(user_id: int):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.put("/users/{user_id}/role")
-def update_user_role(user_id: int, role: str = Query(..., description="New role: customer or admin")):
+def update_user_role(user_id: int, role: str = Query(..., description="New role: customer or admin"), current_admin: dict = Depends(get_current_admin)):
     try:
-        role_data = {"role": role}
-        response = requests.put(f"http://user-service:8080/admin/users/{user_id}/role", json=role_data)
+        response = requests.put(f"http://user-service:8080/admin/users/{user_id}/role", json={"role": role})
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
@@ -125,7 +160,8 @@ def get_all_inventory(
     sort_by: Optional[str] = Query("name", description="Sort by: name, price, brand, discount, date_added"),
     sort_order: Optional[str] = Query("asc", description="Sort order: asc or desc"),
     limit: Optional[int] = Query(100, description="Number of results to return"),
-    offset: Optional[int] = Query(0, description="Number of results to skip")
+    offset: Optional[int] = Query(0, description="Number of results to skip"),
+    current_admin: dict = Depends(get_current_admin)
 ):
     try:
         params = {
@@ -146,7 +182,7 @@ def get_all_inventory(
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
 @app.get("/inventory/{product_id}")
-def get_product_details(product_id: int):
+def get_product_details(product_id: int, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.get(f"http://inventory-service:8080/admin/products/{product_id}")
         return response.json()
@@ -154,7 +190,7 @@ def get_product_details(product_id: int):
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
 @app.post("/inventory")
-def create_product(product_data: ProductCreateRequest):
+def create_product(product_data: ProductCreateRequest, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.post("http://inventory-service:8080/admin/products", json=product_data.dict())
         return response.json()
@@ -162,7 +198,7 @@ def create_product(product_data: ProductCreateRequest):
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
 @app.put("/inventory/{product_id}")
-def update_product(product_id: int, product_data: dict):
+def update_product(product_id: int, product_data: dict, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.put(f"http://inventory-service:8080/admin/products/{product_id}", json=product_data)
         return response.json()
@@ -170,7 +206,7 @@ def update_product(product_id: int, product_data: dict):
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
 @app.delete("/inventory/{product_id}")
-def delete_product(product_id: int):
+def delete_product(product_id: int, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.delete(f"http://inventory-service:8080/admin/products/{product_id}")
         return response.json()
@@ -179,7 +215,7 @@ def delete_product(product_id: int):
 
 # ========== BRAND MANAGEMENT ROUTES ==========
 @app.get("/brands")
-def get_all_brands():
+def get_all_brands(current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.get("http://inventory-service:8080/admin/brands")
         return response.json()
@@ -187,7 +223,7 @@ def get_all_brands():
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
 @app.post("/brands")
-def create_brand(brand_data: BrandCreateRequest):
+def create_brand(brand_data: BrandCreateRequest, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.post("http://inventory-service:8080/admin/brands", json=brand_data.dict())
         return response.json()
@@ -195,7 +231,7 @@ def create_brand(brand_data: BrandCreateRequest):
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
 @app.put("/brands/{brand_id}")
-def update_brand(brand_id: int, brand_data: dict):
+def update_brand(brand_id: int, brand_data: dict, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.put(f"http://inventory-service:8080/admin/brands/{brand_id}", json=brand_data)
         return response.json()
@@ -203,7 +239,7 @@ def update_brand(brand_id: int, brand_data: dict):
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
 @app.delete("/brands/{brand_id}")
-def delete_brand(brand_id: int):
+def delete_brand(brand_id: int, current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.delete(f"http://inventory-service:8080/admin/brands/{brand_id}")
         return response.json()
@@ -218,7 +254,8 @@ def get_all_orders(
     date_from: Optional[str] = Query(None, description="Filter orders from date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="Filter orders to date (YYYY-MM-DD)"),
     limit: Optional[int] = Query(50, description="Number of results to return"),
-    offset: Optional[int] = Query(0, description="Number of results to skip")
+    offset: Optional[int] = Query(0, description="Number of results to skip"),
+    current_admin: dict = Depends(get_current_admin)
 ):
     try:
         params = {
@@ -263,7 +300,7 @@ def get_all_orders(
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.get("/orders/{order_id}")
-def get_order_details(order_id: int):
+def get_order_details(order_id: int, current_admin: dict = Depends(get_current_admin)):
     try:
         # Get order from user service
         order_response = requests.get(f"http://user-service:8080/admin/orders/{order_id}")
@@ -296,17 +333,16 @@ def get_order_details(order_id: int):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.put("/orders/{order_id}/status")
-def update_order_status(order_id: int, status: str = Query(..., description="New order status")):
+def update_order_status(order_id: int, status: str = Query(..., description="New order status"), current_admin: dict = Depends(get_current_admin)):
     try:
-        status_data = {"status": status}
-        response = requests.put(f"http://user-service:8080/admin/orders/{order_id}/status", json=status_data)
+        response = requests.put(f"http://user-service:8080/admin/orders/{order_id}/status", json={"status": status})
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
 
-# ========== ANALYTICS & REPORTING ROUTES ==========
+# ========== ANALYTICS ROUTES ==========
 @app.get("/analytics/users")
-def get_user_analytics():
+def get_user_analytics(current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.get("http://user-service:8080/admin/analytics/users")
         return response.json()
@@ -314,7 +350,7 @@ def get_user_analytics():
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.get("/analytics/inventory")
-def get_inventory_analytics():
+def get_inventory_analytics(current_admin: dict = Depends(get_current_admin)):
     try:
         response = requests.get("http://inventory-service:8080/admin/analytics/inventory")
         return response.json()
@@ -324,7 +360,8 @@ def get_inventory_analytics():
 @app.get("/analytics/sales")
 def get_sales_analytics(
     date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
+    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
+    current_admin: dict = Depends(get_current_admin)
 ):
     try:
         params = {
