@@ -1,6 +1,6 @@
 import fastapi
 import requests
-from fastapi import HTTPException, Query
+from fastapi import HTTPException, Query, Header, Depends
 from typing import Optional
 from pydantic import BaseModel
 
@@ -17,6 +17,27 @@ class UserRegistration(BaseModel):
     email: str
     password: str
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+# Authentication dependency
+async def get_current_user(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    
+    try:
+        # Call IDP to verify token
+        response = requests.post("http://idp-service:8080/verify", 
+                               headers={"Authorization": authorization})
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+            
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+
 # Health check
 @app.get("/")
 def read_root():
@@ -32,35 +53,47 @@ def login(login_data: LoginRequest):
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
-@app.post("/auth/register")
-def register(user_data: UserRegistration):
+@app.post("/auth/refresh")
+def refresh_token(refresh_data: RefreshRequest):
     try:
-        # Call user service to create account
-        response = requests.post("http://user-service:8080/users", json=user_data.dict())
-        return response.json()
-    except requests.RequestException:
-        raise HTTPException(status_code=503, detail="User service unavailable")
-
-@app.post("/auth/logout")
-def logout():
-    try:
-        response = requests.post("http://idp-service:8080/logout")
+        # Call IDP service for token refresh
+        response = requests.post("http://idp-service:8080/refresh", json=refresh_data.dict())
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
+@app.post("/auth/logout")
+def logout(authorization: str = Header(None)):
+    try:
+        response = requests.post("http://idp-service:8080/logout", 
+                               headers={"Authorization": authorization})
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+
+@app.post("/auth/register")
+def register(user_data: UserRegistration):
+    try:
+        # Call user service to create account
+        response = requests.post("http://user-service:8080/users/register", json=user_data.dict())
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="User service unavailable")
+
 # ========== USER PROFILE ROUTES ==========
 @app.get("/profile")
-def get_user_profile(user_id: int = Query(..., description="User ID")):
+def get_user_profile(current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         response = requests.get(f"http://user-service:8080/users/{user_id}")
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.put("/profile")
-def update_user_profile(user_id: int = Query(...), profile_data: dict = {}):
+def update_user_profile(profile_data: dict, current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         response = requests.put(f"http://user-service:8080/users/{user_id}", json=profile_data)
         return response.json()
     except requests.RequestException:
@@ -146,8 +179,9 @@ def get_product_details(product_id: int):
 
 # ========== SHOPPING CART ROUTES ==========
 @app.get("/cart")
-def get_cart(user_id: int = Query(...)):
+def get_cart(current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         # Get cart from user service
         cart_response = requests.get(f"http://user-service:8080/users/{user_id}/cart")
         if cart_response.status_code != 200:
@@ -180,8 +214,9 @@ def get_cart(user_id: int = Query(...)):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.post("/cart/add")
-def add_to_cart(user_id: int = Query(...), product_id: int = Query(...), quantity: int = Query(1)):
+def add_to_cart(product_id: int = Query(...), quantity: int = Query(1), current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         cart_data = {"product_id": product_id, "quantity": quantity}
         response = requests.post(f"http://user-service:8080/users/{user_id}/cart", json=cart_data)
         return response.json()
@@ -189,8 +224,9 @@ def add_to_cart(user_id: int = Query(...), product_id: int = Query(...), quantit
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.delete("/cart/remove")
-def remove_from_cart(user_id: int = Query(...), product_id: int = Query(...)):
+def remove_from_cart(product_id: int = Query(...), current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         response = requests.delete(f"http://user-service:8080/users/{user_id}/cart/{product_id}")
         return response.json()
     except requests.RequestException:
@@ -198,8 +234,9 @@ def remove_from_cart(user_id: int = Query(...), product_id: int = Query(...)):
 
 # ========== ORDER ROUTES ==========
 @app.get("/orders")
-def get_user_orders(user_id: int = Query(...)):
+def get_user_orders(current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         # Get orders from user service
         orders_response = requests.get(f"http://user-service:8080/users/{user_id}/orders")
         if orders_response.status_code != 200:
@@ -232,8 +269,9 @@ def get_user_orders(user_id: int = Query(...)):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.get("/orders/{order_id}")
-def get_order_details(order_id: int, user_id: int = Query(...)):
+def get_order_details(order_id: int, current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         # Get order from user service
         order_response = requests.get(f"http://user-service:8080/users/{user_id}/orders/{order_id}")
         if order_response.status_code != 200:
@@ -265,8 +303,9 @@ def get_order_details(order_id: int, user_id: int = Query(...)):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.post("/orders")
-def create_order(user_id: int = Query(...), order_data: dict = {}):
+def create_order(order_data: dict = {}, current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         response = requests.post(f"http://user-service:8080/users/{user_id}/orders", json=order_data)
         return response.json()
     except requests.RequestException:
