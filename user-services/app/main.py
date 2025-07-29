@@ -67,6 +67,9 @@ async def update_user_profile(user_id: int, request: Request):
         raise HTTPException(status_code=500, detail=str(e))
     
 # ========== ADMIN ROUTES ==========
+# GET /users
+
+# TODO: Fix role in query
 @app.get("/admin/users")
 async def get_all_users(
     role: Optional[str] = Query(None, description="Filter by role: customer or admin"),
@@ -105,5 +108,18 @@ async def get_all_users(
         close_db(conn)
         return result
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# GET /users/{user_id}
+@app.get("/admin/users/{user_id}")
+async def get_user_details(user_id: int):
+    try:
+        conn = connect_user_db()
+        query = f"SELECT * FROM users WHERE user_id = {user_id}"
+
+        result = query_db(conn, query)
+        close_db(conn)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
