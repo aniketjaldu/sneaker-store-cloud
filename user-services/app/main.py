@@ -134,7 +134,7 @@ async def get_user_details(user_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-# TODO: Fix this route
+# TODO: Fix this route with foreign constraints
 # POST /users
 @app.post("/admin/users")
 async def create_user(user: UserCreateRequest, role: str = Query("customer")):
@@ -189,13 +189,24 @@ async def update_user(user_id: int, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# TODO: Fix foreign key constraints with inventory
 # DELETE /users
-@app.delete("/admin/users")
-async def delete_user():
+@app.delete("/admin/users/{user_id}")
+async def delete_user(user_id: int):
     try:   
         conn = connect_user_db()
+
+        # Delete user role first
+        role_query = "DELETE FROM user_roles WHERE user_id = %s"
+        execute_db(conn, role_query, (user_id,))
+
+        # Delete user
+        user_query = "DELETE FROM users WHERE user_id = %s"
+        execute_db(conn, user_query, (user_id,))
+
         close_db(conn)
-        return
+
+        return {"message": "User has been deleted"}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
