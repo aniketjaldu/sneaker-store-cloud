@@ -79,7 +79,12 @@ async def get_all_users(
 ):
     try:
         conn = connect_user_db()
-        query = "SELECT * FROM users"
+        query = """
+            SELECT *
+            FROM users u
+            INNER JOIN user_roles ur
+            ON ur.user_id = u.user_id
+        """
         filter = []
         params = []
 
