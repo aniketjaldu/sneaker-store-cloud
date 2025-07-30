@@ -7,6 +7,13 @@ from shared.models import connect_to_db, query_db, close_db, execute_db
 
 app = fastapi.FastAPI()
 
+class UserCreateRequest(BaseModel):
+    first_name: str
+    last_name: str
+    email: str
+    password: str
+    role: str = "customer"
+
 # Helper function to connect to db
 def connect_user_db():
     return connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
@@ -68,8 +75,6 @@ async def update_user_profile(user_id: int, request: Request):
     
 # ========== ADMIN ROUTES ==========
 # GET /users
-
-# TODO: Fix role in query
 @app.get("/admin/users")
 async def get_all_users(
     role: Optional[str] = Query(None, description="Filter by role: customer or admin"),
@@ -126,5 +131,82 @@ async def get_user_details(user_id: int):
         result = query_db(conn, query)
         close_db(conn)
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# TODO: Fix this route
+# POST /users
+@app.post("/admin/users")
+async def create_user(user: UserCreateRequest, role: str = Query("customer")):
+    try:
+        conn = connect_user_db()
+        
+        # Insert user into the users table
+        user_query = """
+            INSERT INTO users (first_name, last_name, email, password)
+            VALUES (%s, %s, %s, %s)
+        """
+        user_values = (user.first_name, user.last_name, user.email, user.password)
+        cursor = conn.cursor()
+        cursor.execute(user_query, user_values)
+        user_id = cursor.lastrowid
+        conn.commit()
+        cursor.close()
+        
+        # Insert into user_roles table
+        role_query = """
+            INSERT INTO user_roles (user_id, role)
+            VALUES (%s, %s)
+        """
+        role_values = (user_id, role)
+        execute_db(conn, role_query, role_values)
+        
+        close_db(conn)
+        return {"message": "User created successfully", "user_id": user_id}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# PUT /users
+@app.put("/admin/users/{user_id}")
+async def update_user(user_id: int, request: Request):
+    try:
+        profile_data = await request.json()
+        if not profile_data:
+            raise HTTPException(status_code=400, detail="No profile data provided")
+                
+        set_clause = ", ".join(f"{key} = %s" for key in profile_data.keys())
+        values = list(profile_data.values())
+        values.append(user_id)
+
+        conn = connect_user_db()
+        query = f"UPDATE users SET {set_clause} where user_id = %s"
+        execute_db(conn, query, values)
+        close_db(conn)
+        return {"message": "User updated successfully"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# DELETE /users
+@app.delete("/admin/users")
+async def delete_user():
+    try:   
+        conn = connect_user_db()
+        close_db(conn)
+        return
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# PUT /users role
+@app.post("/admin/users")
+async def update_user_role():
+    try:   
+        conn = connect_user_db()
+        close_db(conn)
+        return
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
