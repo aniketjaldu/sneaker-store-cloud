@@ -1,6 +1,6 @@
 import fastapi
 import requests
-from fastapi import HTTPException, Request, Query
+from fastapi import HTTPException, Request, Query, Depends
 from pydantic import BaseModel
 from typing import Optional
 from shared.models import connect_to_db, query_db, close_db, execute_db
@@ -211,13 +211,22 @@ async def delete_user(user_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# TODO: Check authorization in Postman
 # PUT /users role
-@app.post("/admin/users")
-async def update_user_role():
+@app.put("/admin/users/{user_id}/role")
+async def update_user_role(user_id: int, request: Request):
     try:   
+        data = await request.json()
+        role = data.get("role")
+        if not role:
+            raise HTTPException(status_code=400, detail="Role is required")
+
         conn = connect_user_db()
+        query = "UPDATE user_roles SET role = %s WHERE user_id = %s"
+        execute_db(conn, query, (role, user_id))
         close_db(conn)
-        return
+
+        return {"message": f"User role updated to '{role}' successfully"}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
