@@ -18,8 +18,8 @@ class UserCreateRequest(BaseModel):
 def connect_user_db():
     return connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
 
-def connect_inventory_db():
-    return connect_to_db("inventory-db", "root", "inventorypassword", "inventory_database", "3306")
+# ========== ADMIN AUTHENTICATION ROUTES ==========
+
 
 # ========== USER ROUTES ==========
 @app.get("/")
