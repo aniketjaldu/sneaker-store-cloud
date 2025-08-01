@@ -604,3 +604,34 @@ async def add_to_cart(user_id: int, product_id: int, quantity: int = Query(1)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Remove a specific product from a user's cart
+@app.delete("/users/{user_id}/cart/{product_id}")
+async def remove_from_cart(user_id: int, product_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if item exists
+        check_query = """
+            SELECT * FROM shopping_cart
+            WHERE user_id = %s AND product_id = %s
+        """
+        item = query_db(conn, check_query, (user_id, product_id))
+
+        if not item:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Item not found in cart")
+
+        # Delete the item
+        delete_query = """
+            DELETE FROM shopping_cart
+            WHERE user_id = %s AND product_id = %s
+        """
+        execute_db(conn, delete_query, (user_id, product_id))
+
+        close_db(conn)
+        return {"message": "Item removed from cart"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
