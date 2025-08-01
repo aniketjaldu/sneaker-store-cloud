@@ -559,3 +559,48 @@ async def get_user_cart(user_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/users/{user_id}/cart/{product_id}")
+async def add_to_cart(user_id: int, product_id: int, quantity: int = Query(1)):
+    try:
+        if quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+
+        conn = connect_user_db()
+
+        # Check if user exists
+        user_check = "SELECT user_id FROM users WHERE user_id = %s"
+        if not query_db(conn, user_check, (user_id,)):
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Check if item already exists in cart
+        existing_query = """
+            SELECT quantity FROM shopping_cart WHERE user_id = %s AND product_id = %s
+        """
+        existing_item = query_db(conn, existing_query, (user_id, product_id))
+
+        if existing_item:
+            # Update quantity
+            new_quantity = existing_item[0]["quantity"] + quantity
+            update_query = """
+                UPDATE shopping_cart
+                SET quantity = %s
+                WHERE user_id = %s AND product_id = %s
+            """
+            execute_db(conn, update_query, (new_quantity, user_id, product_id))
+        else:
+            # Insert new item
+            insert_query = """
+                INSERT INTO shopping_cart (user_id, product_id, quantity)
+                VALUES (%s, %s, %s)
+            """
+            execute_db(conn, insert_query, (user_id, product_id, quantity))
+
+        close_db(conn)
+        return {"message": "Item added to cart"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
