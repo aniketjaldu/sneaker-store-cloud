@@ -840,3 +840,33 @@ async def get_order_details(order_id: int):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+# Update order status (admin)
+@app.put("/admin/orders/{order_id}/status")
+async def update_order_status(order_id: int, request: Request):
+    try:
+        data = await request.json()
+        new_status = data.get("status")
+
+        if new_status not in ["pending", "processing", "shipped", "delivered", "cancelled"]:
+            raise HTTPException(status_code=400, detail="Invalid status value")
+
+        conn = connect_user_db()
+
+        # Check if order exists
+        check_query = "SELECT order_id FROM orders WHERE order_id = %s"
+        existing = query_db(conn, check_query, (order_id,))
+        if not existing:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        # Update order status
+        update_query = "UPDATE orders SET order_status = %s WHERE order_id = %s"
+        execute_db(conn, update_query, (new_status, order_id))
+
+        close_db(conn)
+        return {"message": f"Order status updated to '{new_status}'"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
