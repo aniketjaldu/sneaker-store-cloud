@@ -32,9 +32,6 @@ class RefreshTokenUpdateRequest(BaseModel):
 def connect_user_db():
     return connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
 
-# ========== ADMIN AUTHENTICATION ROUTES ==========
-
-
 # Password hashing utility
 def hash_password(password: str) -> str:
     return hashlib.sha1(password.encode()).hexdigest()
@@ -454,13 +451,13 @@ async def delete_user(user_id: int):
         # Check for existing orders
         orders_query = "SELECT COUNT(*) FROM orders WHERE user_id = %s"
         order_count = query_db(conn, orders_query, (user_id,))
-        if order_count and order_count[0][0] > 0:
+        if order_count and order_count[0]["COUNT(*)"] > 0:
             raise HTTPException(status_code=400, detail="Cannot delete user with existing orders")
         
         # Check for cart items
         cart_query = "SELECT COUNT(*) FROM shopping_cart WHERE user_id = %s"
         cart_count = query_db(conn, cart_query, (user_id,))
-        if cart_count and cart_count[0][0] > 0:
+        if cart_count and cart_count[0]["COUNT(*)"] > 0:
             # Delete cart items first
             delete_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
             execute_db(conn, delete_cart_query, (user_id,))
