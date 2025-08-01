@@ -651,7 +651,7 @@ async def get_user_orders(user_id: int):
         orders_query = "SELECT * FROM orders WHERE user_id = %s"
         orders = query_db(conn, orders_query, (user_id,))
         
-         # For each order, get order items
+        # For each order, get order items
         for order in orders:
             items_query = """
                 SELECT product_id, quantity, price
@@ -664,6 +664,42 @@ async def get_user_orders(user_id: int):
         close_db(conn)
 
         return orders
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users/{user_id}/orders/{order_id}")
+async def get_order_details(user_id: int, order_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if user exists
+        check_user_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_user_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get the order
+        order_query = "SELECT * FROM orders WHERE order_id = %s AND user_id = %s"
+        order_result = query_db(conn, order_query, (order_id, user_id))
+        if not order_result:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        order = order_result[0]
+
+        # Get order items
+        items_query = """
+            SELECT product_id, quantity, price
+            FROM order_items
+            WHERE order_id = %s
+        """
+        items = query_db(conn, items_query, (order_id,))
+        order["items"] = items
+
+        close_db(conn)
+        return order
 
     except HTTPException:
         raise
