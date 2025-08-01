@@ -556,3 +556,196 @@ async def get_user_cart(user_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/users/{user_id}/cart/{product_id}")
+async def add_to_cart(user_id: int, product_id: int, quantity: int = Query(1)):
+    try:
+        if quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+
+        conn = connect_user_db()
+
+        # Check if user exists
+        user_check = "SELECT user_id FROM users WHERE user_id = %s"
+        if not query_db(conn, user_check, (user_id,)):
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Check if item already exists in cart
+        existing_query = """
+            SELECT quantity FROM shopping_cart WHERE user_id = %s AND product_id = %s
+        """
+        existing_item = query_db(conn, existing_query, (user_id, product_id))
+
+        if existing_item:
+            # Update quantity
+            new_quantity = existing_item[0]["quantity"] + quantity
+            update_query = """
+                UPDATE shopping_cart
+                SET quantity = %s
+                WHERE user_id = %s AND product_id = %s
+            """
+            execute_db(conn, update_query, (new_quantity, user_id, product_id))
+        else:
+            # Insert new item
+            insert_query = """
+                INSERT INTO shopping_cart (user_id, product_id, quantity)
+                VALUES (%s, %s, %s)
+            """
+            execute_db(conn, insert_query, (user_id, product_id, quantity))
+
+        close_db(conn)
+        return {"message": "Item added to cart"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Remove a specific product from a user's cart
+@app.delete("/users/{user_id}/cart/{product_id}")
+async def remove_from_cart(user_id: int, product_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if item exists
+        check_query = """
+            SELECT * FROM shopping_cart
+            WHERE user_id = %s AND product_id = %s
+        """
+        item = query_db(conn, check_query, (user_id, product_id))
+
+        if not item:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Item not found in cart")
+
+        # Delete the item
+        delete_query = """
+            DELETE FROM shopping_cart
+            WHERE user_id = %s AND product_id = %s
+        """
+        execute_db(conn, delete_query, (user_id, product_id))
+
+        close_db(conn)
+        return {"message": "Item removed from cart"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users/{user_id}/orders")
+async def get_user_orders(user_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if user exists
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get all orders for the user
+        orders_query = "SELECT * FROM orders WHERE user_id = %s"
+        orders = query_db(conn, orders_query, (user_id,))
+        
+        # For each order, get order items
+        for order in orders:
+            items_query = """
+                SELECT product_id, quantity, price
+                FROM order_items
+                WHERE order_id = %s
+            """
+            items = query_db(conn, items_query, (order["order_id"],))
+            order["items"] = items
+
+        close_db(conn)
+
+        return orders
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users/{user_id}/orders/{order_id}")
+async def get_order_details(user_id: int, order_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if user exists
+        check_user_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_user_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get the order
+        order_query = "SELECT * FROM orders WHERE order_id = %s AND user_id = %s"
+        order_result = query_db(conn, order_query, (order_id, user_id))
+        if not order_result:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        order = order_result[0]
+
+        # Get order items
+        items_query = """
+            SELECT product_id, quantity, price
+            FROM order_items
+            WHERE order_id = %s
+        """
+        items = query_db(conn, items_query, (order_id,))
+        order["items"] = items
+
+        close_db(conn)
+        return order
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Create order from cart (checkout)
+@app.post("/users/{user_id}/orders")
+async def create_order(user_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Validate user
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        if not query_db(conn, check_query, (user_id,)):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Fetch cart items
+        cart_query = "SELECT product_id, quantity FROM shopping_cart WHERE user_id = %s"
+        cart_items = query_db(conn, cart_query, (user_id,))
+        if not cart_items:
+            raise HTTPException(status_code=400, detail="Cart is empty")
+
+        # Create order
+        order_query = "INSERT INTO orders (user_id, order_date) VALUES (%s, NOW())"
+        cursor = conn.cursor()
+        cursor.execute(order_query, (user_id,))
+        order_id = cursor.lastrowid
+
+        # Add order items
+        for item in cart_items:
+            item_query = """
+                INSERT INTO order_items (order_id, product_id, quantity, price)
+                VALUES (%s, %s, %s, %s)
+            """
+            # Placeholder price (e.g., 0.0), replace with actual pricing logic later
+            execute_db(conn, item_query, (order_id, item["product_id"], item["quantity"], 0.0))
+
+        # Clear cart
+        clear_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
+        execute_db(conn, clear_cart_query, (user_id,))
+
+        conn.commit()
+        cursor.close()
+        close_db(conn)
+
+        return {"message": "Order placed successfully", "order_id": order_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
