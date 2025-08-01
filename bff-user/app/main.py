@@ -1,10 +1,21 @@
 import fastapi
 import requests
 from fastapi import HTTPException, Query, Header, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from pydantic import BaseModel
 
 app = fastapi.FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 # Data models for request/response
 class LoginRequest(BaseModel):
@@ -43,6 +54,11 @@ async def get_current_user(authorization: str = Header(None)):
 def read_root():
     return {"message": "User BFF is running"}
 
+# Handle OPTIONS requests for CORS preflight
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    return {}
+
 # ========== AUTHENTICATION ROUTES ==========
 @app.post("/auth/login")
 def login(login_data: LoginRequest):
@@ -58,6 +74,16 @@ def refresh_token(refresh_data: RefreshRequest):
     try:
         # Call IDP service for token refresh
         response = requests.post("http://idp-service:8080/refresh", json=refresh_data.dict())
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+
+@app.post("/auth/verify")
+def verify_token(authorization: str = Header(None)):
+    try:
+        # Call IDP service to verify token
+        response = requests.post("http://idp-service:8080/verify", 
+                               headers={"Authorization": authorization})
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
