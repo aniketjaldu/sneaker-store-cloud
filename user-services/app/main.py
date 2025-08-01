@@ -1,5 +1,7 @@
 import fastapi
 import requests
+import hashlib
+import datetime
 from fastapi import HTTPException, Request, Query, Depends
 from pydantic import BaseModel
 from typing import Optional
@@ -14,6 +16,18 @@ class UserCreateRequest(BaseModel):
     password: str
     role: str = "customer"
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class RefreshTokenRequest(BaseModel):
+    token_hash: str
+
+class RefreshTokenUpdateRequest(BaseModel):
+    old_token_hash: str
+    new_token_hash: str
+    expires_at: str
+
 # Helper function to connect to db
 def connect_user_db():
     return connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
@@ -21,11 +35,240 @@ def connect_user_db():
 # ========== ADMIN AUTHENTICATION ROUTES ==========
 
 
-# ========== USER ROUTES ==========
+# Password hashing utility
+def hash_password(password: str) -> str:
+    return hashlib.sha1(password.encode()).hexdigest()
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    return hash_password(password) == hashed_password
+
 @app.get("/")
 def read_root():
-    return {"message": "Hello, World!"}
+    return {"message": "User services are running"}
 
+# ========== AUTHENTICATION ROUTES ==========
+@app.post("/users/login")
+async def login(login_data: LoginRequest):
+    try:
+        conn = connect_user_db()
+        
+        # Get user with role information
+        query = """
+            SELECT u.user_id, u.first_name, u.last_name, u.email, u.password, ur.role
+            FROM users u
+            INNER JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.email = %s
+        """
+        result = query_db(conn, query, (login_data.email,))
+        close_db(conn)
+        
+        if not result:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        user = result[0]
+        
+        # Verify password
+        if not verify_password(login_data.password, user["password"]):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        # Return user data
+        return {
+            "user_id": user["user_id"],
+            "email": user["email"],
+            "first_name": user["first_name"],
+            "last_name": user["last_name"],
+            "role": user["role"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/users/admin/login")
+async def admin_login(login_data: LoginRequest):
+    try:
+        conn = connect_user_db()
+        
+        # Get admin user with role information
+        query = """
+            SELECT u.user_id, u.first_name, u.last_name, u.email, u.password, ur.role
+            FROM users u
+            INNER JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.email = %s AND ur.role = 'admin'
+        """
+        result = query_db(conn, query, (login_data.email,))
+        close_db(conn)
+        
+        if not result:
+            raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        
+        user = result[0]
+        
+        # Verify password
+        if not verify_password(login_data.password, user["password"]):
+            raise HTTPException(status_code=401, detail="Invalid admin credentials")
+        
+        # Return user data
+        return {
+            "user_id": user["user_id"],
+            "email": user["email"],
+            "first_name": user["first_name"],
+            "last_name": user["last_name"],
+            "role": user["role"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/users/refresh-tokens")
+async def store_refresh_token(token_data: dict):
+    try:
+        conn = connect_user_db()
+        
+        # Insert refresh token
+        query = """
+            INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
+            VALUES (%s, %s, %s)
+        """
+        values = (
+            token_data["user_id"],
+            token_data["token_hash"],
+            token_data["expires_at"]
+        )
+        execute_db(conn, query, values)
+        close_db(conn)
+        
+        return {"message": "Refresh token stored successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/users/verify-refresh-token")
+async def verify_refresh_token(token_request: RefreshTokenRequest):
+    try:
+        conn = connect_user_db()
+        
+        # Check if refresh token exists and is not expired
+        query = """
+            SELECT token_id, user_id, expires_at
+            FROM refresh_tokens
+            WHERE token_hash = %s AND expires_at > NOW()
+        """
+        result = query_db(conn, query, (token_request.token_hash,))
+        close_db(conn)
+        
+        if not result:
+            raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
+        
+        return {"message": "Refresh token is valid", "user_id": result[0]["user_id"]}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/users/refresh-tokens")
+async def update_refresh_token(update_data: RefreshTokenUpdateRequest):
+    try:
+        conn = connect_user_db()
+        
+        # Update refresh token (replace old with new)
+        query = """
+            UPDATE refresh_tokens
+            SET token_hash = %s, expires_at = %s
+            WHERE token_hash = %s
+        """
+        values = (
+            update_data.new_token_hash,
+            update_data.expires_at,
+            update_data.old_token_hash
+        )
+        execute_db(conn, query, values)
+        close_db(conn)
+        
+        return {"message": "Refresh token updated successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/users/refresh-tokens")
+async def delete_refresh_token(token_data: dict):
+    try:
+        conn = connect_user_db()
+        
+        # Delete refresh token
+        query = "DELETE FROM refresh_tokens WHERE token_hash = %s"
+        execute_db(conn, query, (token_data["token_hash"],))
+        close_db(conn)
+        
+        return {"message": "Refresh token deleted successfully"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    
+# ========== USER REGISTRATION ROUTES ==========
+@app.post("/users/register")
+async def register_user(user_data: UserCreateRequest):
+    try:
+        conn = connect_user_db()
+        
+        # Check if email already exists
+        check_query = "SELECT user_id FROM users WHERE email = %s"
+        existing_user = query_db(conn, check_query, (user_data.email,))
+        
+        if existing_user:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        
+        # Hash password
+        hashed_password = hash_password(user_data.password)
+        
+        # Insert user into the users table
+        user_query = """
+            INSERT INTO users (first_name, last_name, email, password)
+            VALUES (%s, %s, %s, %s)
+        """
+        user_values = (user_data.first_name, user_data.last_name, user_data.email, hashed_password)
+        cursor = conn.cursor()
+        cursor.execute(user_query, user_values)
+        user_id = cursor.lastrowid
+        conn.commit()
+        cursor.close()
+        
+        # Insert into user_roles table
+        role_query = """
+            INSERT INTO user_roles (user_id, role)
+            VALUES (%s, %s)
+        """
+        role_values = (user_id, user_data.role)
+        execute_db(conn, role_query, role_values)
+        
+        close_db(conn)
+        
+        return {
+            "message": "User registered successfully",
+            "user_id": user_id,
+            "email": user_data.email,
+            "first_name": user_data.first_name,
+            "last_name": user_data.last_name,
+            "role": user_data.role
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== USER PROFILE ROUTES ==========
 @app.get("/users")
 def get_user_info():
     conn = connect_user_db()
