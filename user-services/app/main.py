@@ -635,3 +635,37 @@ async def remove_from_cart(user_id: int, product_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/users/{user_id}/orders")
+async def get_user_orders(user_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if user exists
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Get all orders for the user
+        orders_query = "SELECT * FROM orders WHERE user_id = %s"
+        orders = query_db(conn, orders_query, (user_id,))
+        
+         # For each order, get order items
+        for order in orders:
+            items_query = """
+                SELECT product_id, quantity, price
+                FROM order_items
+                WHERE order_id = %s
+            """
+            items = query_db(conn, items_query, (order["order_id"],))
+            order["items"] = items
+
+        close_db(conn)
+
+        return orders
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
