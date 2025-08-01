@@ -18,8 +18,8 @@ class UserCreateRequest(BaseModel):
 def connect_user_db():
     return connect_to_db("user-db", "root", "userpassword", "user_database", "3306")
 
-def connect_inventory_db():
-    return connect_to_db("inventory-db", "root", "inventorypassword", "inventory_database", "3306")
+# ========== ADMIN AUTHENTICATION ROUTES ==========
+
 
 # ========== USER ROUTES ==========
 @app.get("/")
@@ -126,18 +126,25 @@ async def get_all_users(
 async def get_user_details(user_id: int):
     try:
         conn = connect_user_db()
-        query = f"SELECT * FROM users WHERE user_id = {user_id}"
-
-        result = query_db(conn, query)
+        query = """
+            SELECT u.*, ur.role
+            FROM users u
+            LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+            WHERE u.user_id = %s
+        """
+        result = query_db(conn, query, (user_id,))
         close_db(conn)
-        return result
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
+            
+        return result[0]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-# TODO: Fix this route with foreign constraints
 # POST /users
 @app.post("/admin/users")
-async def create_user(user: UserCreateRequest, role: str = Query("customer")):
+async def create_user(user: UserCreateRequest):
     try:
         conn = connect_user_db()
         
@@ -158,7 +165,7 @@ async def create_user(user: UserCreateRequest, role: str = Query("customer")):
             INSERT INTO user_roles (user_id, role)
             VALUES (%s, %s)
         """
-        role_values = (user_id, role)
+        role_values = (user_id, user.role)
         execute_db(conn, role_query, role_values)
         
         close_db(conn)
@@ -189,12 +196,35 @@ async def update_user(user_id: int, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# TODO: Fix foreign key constraints with inventory
 # DELETE /users
 @app.delete("/admin/users/{user_id}")
 async def delete_user(user_id: int):
     try:   
         conn = connect_user_db()
+        
+        # Check if user exists
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check for existing orders
+        orders_query = "SELECT COUNT(*) FROM orders WHERE user_id = %s"
+        order_count = query_db(conn, orders_query, (user_id,))
+        if order_count and order_count[0][0] > 0:
+            raise HTTPException(status_code=400, detail="Cannot delete user with existing orders")
+        
+        # Check for cart items
+        cart_query = "SELECT COUNT(*) FROM shopping_cart WHERE user_id = %s"
+        cart_count = query_db(conn, cart_query, (user_id,))
+        if cart_count and cart_count[0][0] > 0:
+            # Delete cart items first
+            delete_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
+            execute_db(conn, delete_cart_query, (user_id,))
+
+        # Delete refresh tokens
+        token_query = "DELETE FROM refresh_tokens WHERE user_id = %s"
+        execute_db(conn, token_query, (user_id,))
 
         # Delete user role first
         role_query = "DELETE FROM user_roles WHERE user_id = %s"
@@ -208,10 +238,11 @@ async def delete_user(user_id: int):
 
         return {"message": "User has been deleted"}
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# TODO: Check authorization in Postman
 # PUT /users role
 @app.put("/admin/users/{user_id}/role")
 async def update_user_role(user_id: int, request: Request):
@@ -220,13 +251,68 @@ async def update_user_role(user_id: int, request: Request):
         role = data.get("role")
         if not role:
             raise HTTPException(status_code=400, detail="Role is required")
+        
+        if role not in ["customer", "admin"]:
+            raise HTTPException(status_code=400, detail="Role must be 'customer' or 'admin'")
 
         conn = connect_user_db()
-        query = "UPDATE user_roles SET role = %s WHERE user_id = %s"
-        execute_db(conn, query, (role, user_id))
+        
+        # Check if user exists
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check if user role exists, if not create it
+        role_exists_query = "SELECT role FROM user_roles WHERE user_id = %s"
+        existing_role = query_db(conn, role_exists_query, (user_id,))
+        
+        if existing_role:
+            # Update existing role
+            query = "UPDATE user_roles SET role = %s WHERE user_id = %s"
+            execute_db(conn, query, (role, user_id))
+        else:
+            # Create new role entry
+            query = "INSERT INTO user_roles (user_id, role) VALUES (%s, %s)"
+            execute_db(conn, query, (user_id, role))
+        
         close_db(conn)
 
         return {"message": f"User role updated to '{role}' successfully"}
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+  
+
+# ========== SHOPPING CART ==========
+# GET /users/{user_id}/cart
+@app.get("/users/{user_id}/cart")
+async def get_user_cart(user_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if user exists
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Retrieve cart items
+        cart_query = """
+            SELECT product_id, quantity
+            FROM shopping_cart
+            WHERE user_id = %s
+        """
+        cart_items = query_db(conn, cart_query, (user_id,))
+        close_db(conn)
+
+        return cart_items
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
