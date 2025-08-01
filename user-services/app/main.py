@@ -806,3 +806,37 @@ async def admin_get_all_orders(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/admin/orders/{order_id}")
+async def get_order_details(order_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Fetch the order with user info
+        order_query = """
+            SELECT o.order_id, o.user_id, o.order_date,
+                   u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            WHERE o.order_id = %s
+        """
+        order_result = query_db(conn, order_query, (order_id,))
+        if not order_result:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        order = order_result[0]
+
+        # Fetch items for this order
+        items_query = """
+            SELECT product_id, quantity, price
+            FROM order_items
+            WHERE order_id = %s
+        """
+        items = query_db(conn, items_query, (order_id,))
+        order["items"] = items
+
+        close_db(conn)
+        return order
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
