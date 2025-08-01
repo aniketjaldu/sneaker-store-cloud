@@ -527,10 +527,8 @@ async def update_user_role(user_id: int, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-  
 
-# ========== SHOPPING CART ==========
+# ========== USER SHOPPING CART ==========
 # GET /users/{user_id}/cart
 @app.get("/users/{user_id}/cart")
 async def get_user_cart(user_id: int):
@@ -750,5 +748,61 @@ async def create_order(user_id: int):
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+# ========== ADMIN SHOPPING CART ==========
+@app.get("/admin/orders")
+async def admin_get_all_orders(
+    user_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),  # Placeholder if you add order status later
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    limit: int = Query(50),
+    offset: int = Query(0)
+):
+    try:
+        conn = connect_user_db()
+
+        query = """
+            SELECT o.order_id, o.user_id, o.order_date, u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+        """
+        filters = []
+        params = []
+
+        if user_id:
+            filters.append("o.user_id = %s")
+            params.append(user_id)
+
+        if date_from:
+            filters.append("o.order_date >= %s")
+            params.append(date_from)
+
+        if date_to:
+            filters.append("o.order_date <= %s")
+            params.append(date_to)
+
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
+
+        query += " ORDER BY o.order_date DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+
+        orders = query_db(conn, query, tuple(params))
+
+        for order in orders:
+            items_query = """
+                SELECT product_id, quantity, price
+                FROM order_items
+                WHERE order_id = %s
+            """
+            items = query_db(conn, items_query, (order["order_id"],))
+            order["items"] = items
+
+        close_db(conn)
+        return orders
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
