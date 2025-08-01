@@ -30,7 +30,7 @@ class RefreshRequest(BaseModel):
 # JWT Utility Functions
 def create_access_token(user_id: int, email: str, role: str) -> str:
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "email": email,
         "role": role,
         "type": "access",
@@ -41,7 +41,7 @@ def create_access_token(user_id: int, email: str, role: str) -> str:
 
 def create_refresh_token(user_id: int, email: str, role: str) -> str:
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "email": email,
         "role": role,
         "type": "refresh",
@@ -128,7 +128,7 @@ async def refresh_token(refresh_data: RefreshRequest):
         if not payload or payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid refresh token")
         
-        user_id = payload["sub"]
+        user_id = int(payload["sub"])
         
         # Verify refresh token exists in database
         verify_response = requests.post("http://user-service:8080/users/verify-refresh-token", 

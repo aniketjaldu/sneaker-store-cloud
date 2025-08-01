@@ -109,15 +109,15 @@ INSERT INTO addresses (address_id, line1, line2, city, state, zip_code, phone, d
     (5, '654 Birch Blvd', 'Unit 5', 'Portland', 'OR', '97205', '503-555-7890', 1);
 
 INSERT INTO users (user_id, first_name, last_name, email, password, shipping_address_id, billing_address_id) VALUES
-    (1, 'Aniket', 'Jaldu', 'jaldua@wit.edu', '6a718fbd768c2378b511f8249b54897f940e9022', 1, 1),
-    (2, 'Denis', 'Le', 'led11@wit.edu', '971e95957d3b74d70d79c20c94e9cd91b85f7aae', 2, 2),
-    (3, 'Jovaughn', 'Oliver', 'oliverj@wit.edu', '974e95957d3b74d70d79c20c94e9cd91b85f7aae', 3, 3),
-    (4, 'Timmy', 'Tran', 'ttran@wit.edu', '3f2975c819cefc686282456aeae3a137bf896ee8', 4, 4),
-    (5, 'Alice', 'Johnson', 'alice.johnson@example.com', 'hashedpassword1', 1, 1),
-    (6, 'Bob', 'Smith', 'bob.smith@example.com', 'hashedpassword2', 2, 2),
-    (7, 'Carol', 'Davis', 'carol.davis@example.com', 'hashedpassword3', 3, 3),
-    (8, 'David', 'Lee', 'david.lee@example.com', 'hashedpassword4', 4, 4),
-    (9, 'Emma', 'Martinez', 'emma.martinez@example.com', 'hashedpassword5', 5, 5);
+    (1, 'Aniket', 'Jaldu', 'jaldua@wit.edu', 'f865b53623b121fd34ee5426c792e5c33af8c227', 1, 1),
+    (2, 'Denis', 'Le', 'led11@wit.edu', 'f865b53623b121fd34ee5426c792e5c33af8c227', 2, 2),
+    (3, 'Jovaughn', 'Oliver', 'oliverj@wit.edu', 'f865b53623b121fd34ee5426c792e5c33af8c227', 3, 3),
+    (4, 'Timmy', 'Tran', 'ttran@wit.edu', 'f865b53623b121fd34ee5426c792e5c33af8c227', 4, 4),
+    (5, 'Alice', 'Johnson', 'alice.johnson@example.com', 'cbfdac6008f9cab4083784cbd1874f76618d2a97', 1, 1),
+    (6, 'Bob', 'Smith', 'bob.smith@example.com', 'cbfdac6008f9cab4083784cbd1874f76618d2a97', 2, 2),
+    (7, 'Carol', 'Davis', 'carol.davis@example.com', 'cbfdac6008f9cab4083784cbd1874f76618d2a97', 3, 3),
+    (8, 'David', 'Lee', 'david.lee@example.com', 'cbfdac6008f9cab4083784cbd1874f76618d2a97', 4, 4),
+    (9, 'Emma', 'Martinez', 'emma.martinez@example.com', 'cbfdac6008f9cab4083784cbd1874f76618d2a97', 5, 5);
 
 INSERT INTO user_roles (user_id, role) VALUES
     (1, 'admin'),
