@@ -705,3 +705,50 @@ async def get_order_details(user_id: int, order_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Create order from cart (checkout)
+@app.post("/users/{user_id}/orders")
+async def create_order(user_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Validate user
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        if not query_db(conn, check_query, (user_id,)):
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Fetch cart items
+        cart_query = "SELECT product_id, quantity FROM shopping_cart WHERE user_id = %s"
+        cart_items = query_db(conn, cart_query, (user_id,))
+        if not cart_items:
+            raise HTTPException(status_code=400, detail="Cart is empty")
+
+        # Create order
+        order_query = "INSERT INTO orders (user_id, order_date) VALUES (%s, NOW())"
+        cursor = conn.cursor()
+        cursor.execute(order_query, (user_id,))
+        order_id = cursor.lastrowid
+
+        # Add order items
+        for item in cart_items:
+            item_query = """
+                INSERT INTO order_items (order_id, product_id, quantity, price)
+                VALUES (%s, %s, %s, %s)
+            """
+            # Placeholder price (e.g., 0.0), replace with actual pricing logic later
+            execute_db(conn, item_query, (order_id, item["product_id"], item["quantity"], 0.0))
+
+        # Clear cart
+        clear_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
+        execute_db(conn, clear_cart_query, (user_id,))
+
+        conn.commit()
+        cursor.close()
+        close_db(conn)
+
+        return {"message": "Order placed successfully", "order_id": order_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
