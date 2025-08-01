@@ -284,3 +284,35 @@ async def update_user_role(user_id: int, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+  
+
+# ========== SHOPPING CART ==========
+# GET /users/{user_id}/cart
+@app.get("/users/{user_id}/cart")
+async def get_user_cart(user_id: int):
+    try:
+        conn = connect_user_db()
+
+        # Check if user exists
+        check_query = "SELECT user_id FROM users WHERE user_id = %s"
+        user_exists = query_db(conn, check_query, (user_id,))
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Retrieve cart items
+        cart_query = """
+            SELECT product_id, quantity
+            FROM shopping_cart
+            WHERE user_id = %s
+        """
+        cart_items = query_db(conn, cart_query, (user_id,))
+        close_db(conn)
+
+        return cart_items
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
