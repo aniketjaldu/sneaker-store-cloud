@@ -143,6 +143,8 @@ services:
     container_name: idp-service
     ports:
       - 8084:8080
+    environment:
+      JWT_SECRET: "super-secret-jwt-key"
     networks:
       user-network:
       admin-network:
@@ -158,6 +160,9 @@ services:
       HOSTNAME: mail.sneaker.local
     volumes:
       - postfix_data:/var/spool/postfix
+    networks:
+      user-network:
+      admin-network:
 
 volumes:
   user-db-data:

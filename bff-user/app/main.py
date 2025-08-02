@@ -1,8 +1,9 @@
 import fastapi
 import requests
-from fastapi import HTTPException, Query
+from fastapi import HTTPException, Query, Header, Depends
 from typing import Optional
 from pydantic import BaseModel
+from shared.email_utils import send_email, create_order_confirmation_email_content, create_password_reset_email_content
 
 app = fastapi.FastAPI()
 
@@ -16,6 +17,34 @@ class UserRegistration(BaseModel):
     last_name: str
     email: str
     password: str
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirmRequest(BaseModel):
+    reset_token: str
+    new_password: str
+
+# Authentication dependency
+async def get_current_user(authorization: str = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    
+    try:
+        # Call IDP to verify token
+        response = requests.post("http://idp-service:8080/verify", 
+                               headers={"Authorization": authorization})
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+            
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
 # Health check
 @app.get("/")
@@ -32,35 +61,93 @@ def login(login_data: LoginRequest):
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
-@app.post("/auth/register")
-def register(user_data: UserRegistration):
+@app.post("/auth/refresh")
+def refresh_token(refresh_data: RefreshRequest):
     try:
-        # Call user service to create account
-        response = requests.post("http://user-service:8080/users", json=user_data.dict())
-        return response.json()
-    except requests.RequestException:
-        raise HTTPException(status_code=503, detail="User service unavailable")
-
-@app.post("/auth/logout")
-def logout():
-    try:
-        response = requests.post("http://idp-service:8080/logout")
+        # Call IDP service for token refresh
+        response = requests.post("http://idp-service:8080/refresh", json=refresh_data.dict())
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
+@app.post("/auth/logout")
+def logout(authorization: str = Header(None)):
+    try:
+        response = requests.post("http://idp-service:8080/logout", 
+                               headers={"Authorization": authorization})
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+
+@app.post("/auth/register")
+def register(user_data: UserRegistration):
+    try:
+        # Call user service to create account
+        response = requests.post("http://user-service:8080/users/register", json=user_data.dict())
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="User service unavailable")
+
+@app.post("/auth/request-password-reset")
+def request_password_reset(reset_request: PasswordResetRequest):
+    try:
+        # Call user service to request password reset
+        response = requests.post("http://user-service:8080/users/request-password-reset", json=reset_request.dict())
+        reset_result = response.json()
+        
+        if response.status_code != 200:
+            return reset_result
+        
+        # If password reset was successful, we need to send the email
+        # The user service should return the user_id and reset_token
+        user_id = reset_result.get("user_id")
+        reset_token = reset_result.get("reset_token")
+        
+        if user_id and reset_token:
+            # Get user info for email
+            user_response = requests.get(f"http://user-service:8080/users/{user_id}")
+            if user_response.status_code == 200:
+                user_info = user_response.json()
+                
+                # Send password reset email
+                try:
+                    subject, body, html_body = create_password_reset_email_content(user_info, reset_token)
+                    email_sent = send_email(user_info["email"], subject, body, html_body)
+                    if email_sent:
+                        print(f"Password reset email sent to {user_info['email']}")
+                    else:
+                        print(f"Failed to send password reset email to {user_info['email']}")
+                except Exception as e:
+                    print(f"Error sending password reset email: {e}")
+        
+        return reset_result
+        
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="User service unavailable")
+
+@app.post("/auth/confirm-password-reset")
+def confirm_password_reset(confirm_request: PasswordResetConfirmRequest):
+    try:
+        # Call user service to confirm password reset
+        response = requests.post("http://user-service:8080/users/confirm-password-reset", json=confirm_request.dict())
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="User service unavailable")
+
 # ========== USER PROFILE ROUTES ==========
 @app.get("/profile")
-def get_user_profile(user_id: int = Query(..., description="User ID")):
+def get_user_profile(current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         response = requests.get(f"http://user-service:8080/users/{user_id}")
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.put("/profile")
-def update_user_profile(user_id: int = Query(...), profile_data: dict = {}):
+def update_user_profile(profile_data: dict, current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         response = requests.put(f"http://user-service:8080/users/{user_id}", json=profile_data)
         return response.json()
     except requests.RequestException:
@@ -147,8 +234,9 @@ def get_product_details(product_id: int):
 
 # ========== SHOPPING CART ROUTES ==========
 @app.get("/cart")
-def get_cart(user_id: int = Query(...)):
+def get_cart(current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         # Get cart from user service
         cart_response = requests.get(f"http://user-service:8080/users/{user_id}/cart")
         if cart_response.status_code != 200:
@@ -181,17 +269,18 @@ def get_cart(user_id: int = Query(...)):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.post("/cart/add")
-def add_to_cart(user_id: int = Query(...), product_id: int = Query(...), quantity: int = Query(1)):
+def add_to_cart(product_id: int = Query(...), quantity: int = Query(1), current_user: dict = Depends(get_current_user)):
     try:
-        cart_data = {"product_id": product_id, "quantity": quantity}
-        response = requests.post(f"http://user-service:8080/users/{user_id}/cart", json=cart_data)
+        user_id = current_user["sub"]
+        response = requests.post(f"http://user-service:8080/users/{user_id}/cart/{product_id}?quantity={quantity}")
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.delete("/cart/remove")
-def remove_from_cart(user_id: int = Query(...), product_id: int = Query(...)):
+def remove_from_cart(product_id: int = Query(...), current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         response = requests.delete(f"http://user-service:8080/users/{user_id}/cart/{product_id}")
         return response.json()
     except requests.RequestException:
@@ -199,8 +288,9 @@ def remove_from_cart(user_id: int = Query(...), product_id: int = Query(...)):
 
 # ========== ORDER ROUTES ==========
 @app.get("/orders")
-def get_user_orders(user_id: int = Query(...)):
+def get_user_orders(current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         # Get orders from user service
         orders_response = requests.get(f"http://user-service:8080/users/{user_id}/orders")
         if orders_response.status_code != 200:
@@ -233,8 +323,9 @@ def get_user_orders(user_id: int = Query(...)):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.get("/orders/{order_id}")
-def get_order_details(order_id: int, user_id: int = Query(...)):
+def get_order_details(order_id: int, current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
         # Get order from user service
         order_response = requests.get(f"http://user-service:8080/users/{user_id}/orders/{order_id}")
         if order_response.status_code != 200:
@@ -266,9 +357,72 @@ def get_order_details(order_id: int, user_id: int = Query(...)):
         raise HTTPException(status_code=503, detail="User service unavailable")
 
 @app.post("/orders")
-def create_order(user_id: int = Query(...), order_data: dict = {}):
+def create_order(order_data: dict = {}, current_user: dict = Depends(get_current_user)):
     try:
+        user_id = current_user["sub"]
+        
+        # Create order in user service
         response = requests.post(f"http://user-service:8080/users/{user_id}/orders", json=order_data)
-        return response.json()
+        order_result = response.json()
+        
+        if response.status_code != 200:
+            return order_result
+        
+        # Get order details for email
+        order_id = order_result.get("order_id")
+        if not order_id:
+            return order_result
+        
+        # Get user info
+        user_response = requests.get(f"http://user-service:8080/users/{user_id}")
+        if user_response.status_code != 200:
+            return order_result
+        
+        user_info = user_response.json()
+        
+        # Get order details with items
+        order_response = requests.get(f"http://user-service:8080/users/{user_id}/orders/{order_id}")
+        if order_response.status_code != 200:
+            return order_result
+        
+        order_info = order_response.json()
+        
+        # Get product details for each item
+        items_with_details = []
+        total_amount = 0.0
+        
+        for item in order_info.get("items", []):
+            try:
+                product_response = requests.get(f"http://inventory-service:8080/products/{item['product_id']}")
+                if product_response.status_code == 200:
+                    product_info = product_response.json()
+                    # Calculate final price with discount
+                    final_price = product_info["market_price"] * (1 - product_info.get("discount_percent", 0) / 100)
+                    item_total = final_price * item["quantity"]
+                    total_amount += item_total
+                    
+                    items_with_details.append({
+                        "product_name": product_info["product_name"],
+                        "brand_name": product_info.get("brand_name", "Unknown"),
+                        "quantity": item["quantity"],
+                        "unit_price": final_price,
+                        "item_total": item_total
+                    })
+            except requests.RequestException:
+                pass
+        
+        # Send order confirmation email
+        try:
+            subject, body, html_body = create_order_confirmation_email_content(user_info, order_info, items_with_details, total_amount)
+            email_sent = send_email(user_info["email"], subject, body, html_body)
+            if email_sent:
+                print(f"Order confirmation email sent for order {order_id}")
+            else:
+                print(f"Failed to send order confirmation email for order {order_id}")
+        except Exception as e:
+            print(f"Error sending order confirmation email: {e}")
+        
+        return order_result
+        
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
