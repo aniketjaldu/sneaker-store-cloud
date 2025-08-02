@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { FaBox, FaTruck, FaCheckCircle, FaClock, FaEye } from 'react-icons/fa';
-import axios from 'axios';
+import { Link, useLocation } from 'react-router-dom';
+import { FaBox, FaTruck, FaCheckCircle, FaClock, FaEye, FaCheck } from 'react-icons/fa';
+import api from '../utils/api';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [successMessage, setSuccessMessage] = useState('');
+  const location = useLocation();
 
   useEffect(() => {
     fetchOrders();
-  }, []);
+    
+    // Check for success message from navigation state
+    if (location.state?.message) {
+      setSuccessMessage(location.state.message);
+      // Clear the state to prevent showing the message again on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const fetchOrders = async () => {
     try {
-      const response = await axios.get('/orders');
+      const response = await api.get('/orders');
       setOrders(Array.isArray(response.data) ? response.data : [response.data]);
     } catch (error) {
       console.error('Error fetching orders:', error);
@@ -59,6 +68,16 @@ const Orders = () => {
 
   return (
     <div className="space-y-8">
+      {/* Success Message */}
+      {successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
+          <div className="flex items-center">
+            <FaCheck className="h-5 w-5 mr-2" />
+            <span>{successMessage}</span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">My Orders</h1>

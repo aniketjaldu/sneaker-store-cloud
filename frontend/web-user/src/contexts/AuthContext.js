@@ -105,6 +105,33 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const requestPasswordReset = async (email) => {
+    try {
+      const response = await api.post('/auth/request-password-reset', { email });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Password reset request failed' 
+      };
+    }
+  };
+
+  const confirmPasswordReset = async (resetToken, newPassword) => {
+    try {
+      const response = await api.post('/auth/confirm-password-reset', {
+        reset_token: resetToken,
+        new_password: newPassword
+      });
+      return { success: true, data: response.data };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Password reset confirmation failed' 
+      };
+    }
+  };
+
   const value = {
     user,
     isAuthenticated,
@@ -112,7 +139,9 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    refreshToken
+    refreshToken,
+    requestPasswordReset,
+    confirmPasswordReset
   };
 
   return (

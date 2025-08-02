@@ -2,11 +2,13 @@ import fastapi
 import requests
 import hashlib
 import datetime
+import secrets
 from fastapi import HTTPException, Request, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from shared.models import connect_to_db, query_db, close_db, execute_db
+
 
 app = fastapi.FastAPI()
 
@@ -38,6 +40,13 @@ class RefreshTokenUpdateRequest(BaseModel):
     old_token_hash: str
     new_token_hash: str
     expires_at: str
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirmRequest(BaseModel):
+    reset_token: str
+    new_password: str
 
 # Helper function to connect to db
 def connect_user_db():
@@ -219,6 +228,94 @@ async def delete_refresh_token(token_data: dict):
         
         return {"message": "Refresh token deleted successfully"}
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== PASSWORD RESET ROUTES ==========
+@app.post("/users/request-password-reset")
+async def request_password_reset(reset_request: PasswordResetRequest):
+    try:
+        conn = connect_user_db()
+        
+        # Check if user exists
+        check_query = "SELECT user_id, first_name FROM users WHERE email = %s"
+        user = query_db(conn, check_query, (reset_request.email,))
+        
+        if not user:
+            # Don't reveal if email exists or not for security
+            return {"message": "If the email exists, a password reset link has been sent"}
+        
+        user_data = user[0]
+        
+        # Generate reset token
+        reset_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(reset_token.encode()).hexdigest()
+        
+        # Store reset token with expiration (1 hour)
+        expires_at = datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+        
+        # Delete any existing reset tokens for this user
+        delete_query = "DELETE FROM password_reset_tokens WHERE user_id = %s"
+        execute_db(conn, delete_query, (user_data["user_id"],))
+        
+        # Insert new reset token
+        insert_query = """
+            INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+            VALUES (%s, %s, %s)
+        """
+        execute_db(conn, insert_query, (user_data["user_id"], token_hash, expires_at))
+        
+        close_db(conn)
+        
+        # Return user_id and reset_token for BFF to handle email sending
+        return {
+            "message": "Password reset link has been sent to your email",
+            "user_id": user_data["user_id"],
+            "reset_token": reset_token
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/users/confirm-password-reset")
+async def confirm_password_reset(confirm_request: PasswordResetConfirmRequest):
+    try:
+        conn = connect_user_db()
+        
+        # Hash the provided token
+        token_hash = hashlib.sha256(confirm_request.reset_token.encode()).hexdigest()
+        
+        # Check if reset token exists and is not expired
+        check_query = """
+            SELECT user_id FROM password_reset_tokens
+            WHERE token_hash = %s AND expires_at > NOW()
+        """
+        result = query_db(conn, check_query, (token_hash,))
+        
+        if not result:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+        
+        user_id = result[0]["user_id"]
+        
+        # Hash new password
+        hashed_password = hash_password(confirm_request.new_password)
+        
+        # Update user password
+        update_query = "UPDATE users SET password = %s WHERE user_id = %s"
+        execute_db(conn, update_query, (hashed_password, user_id))
+        
+        # Delete the used reset token
+        delete_query = "DELETE FROM password_reset_tokens WHERE token_hash = %s"
+        execute_db(conn, delete_query, (token_hash,))
+        
+        close_db(conn)
+        
+        return {"message": "Password has been reset successfully"}
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -662,7 +759,7 @@ async def get_user_orders(user_id: int):
         # For each order, get order items
         for order in orders:
             items_query = """
-                SELECT product_id, quantity, price
+                SELECT product_id, quantity, unit_price, total_price
                 FROM order_items
                 WHERE order_id = %s
             """
@@ -699,7 +796,7 @@ async def get_order_details(user_id: int, order_id: int):
 
         # Get order items
         items_query = """
-            SELECT product_id, quantity, price
+            SELECT product_id, quantity, unit_price, total_price
             FROM order_items
             WHERE order_id = %s
         """
@@ -731,20 +828,30 @@ async def create_order(user_id: int):
         if not cart_items:
             raise HTTPException(status_code=400, detail="Cart is empty")
 
-        # Create order
-        order_query = "INSERT INTO orders (user_id, order_date) VALUES (%s, NOW())"
+        # Get user email
+        user_query = "SELECT email FROM users WHERE user_id = %s"
+        user_result = query_db(conn, user_query, (user_id,))
+        if not user_result:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user_email = user_result[0]["email"]
+        
+        # Create order with required fields
+        order_query = "INSERT INTO orders (user_id, order_date, email, total_amount) VALUES (%s, NOW(), %s, %s)"
         cursor = conn.cursor()
-        cursor.execute(order_query, (user_id,))
+        cursor.execute(order_query, (user_id, user_email, 0.0))  # Placeholder total_amount
         order_id = cursor.lastrowid
 
         # Add order items
         for item in cart_items:
             item_query = """
-                INSERT INTO order_items (order_id, product_id, quantity, price)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price)
+                VALUES (%s, %s, %s, %s, %s)
             """
             # Placeholder price (e.g., 0.0), replace with actual pricing logic later
-            execute_db(conn, item_query, (order_id, item["product_id"], item["quantity"], 0.0))
+            unit_price = 0.0
+            total_price = unit_price * item["quantity"]
+            execute_db(conn, item_query, (order_id, item["product_id"], item["quantity"], unit_price, total_price))
 
         # Clear cart
         clear_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
@@ -753,6 +860,8 @@ async def create_order(user_id: int):
         conn.commit()
         cursor.close()
         close_db(conn)
+
+
 
         return {"message": "Order placed successfully", "order_id": order_id}
 
