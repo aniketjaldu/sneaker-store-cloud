@@ -433,7 +433,7 @@ def get_custom_inventory(
 
 def list_products():
     try:
-        conn = connect_to_db(**DB_CONFIG)
+        conn = connect_inventory_db()
         query = """
             SELECT product_id, product_name,
                    market_price,
@@ -456,7 +456,7 @@ def list_products():
 
 def place_order():
     try:
-        conn = connect_to_db(**DB_CONFIG)
+        conn = connect_inventory_db()
         cursor = conn.cursor()
 
         # Step 1: Get desired product ID
