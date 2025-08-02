@@ -24,7 +24,7 @@ CREATE TABLE products (
   market_price       DECIMAL(10,2)  NOT NULL,
   discount_percent   DECIMAL(10,2)  NOT NULL      DEFAULT 0.00,
   quantity           INT            NOT NULL,
-  date_added         DATETIME       DEFAULT NULL,
+  date_added         DATETIME       DEFAULT CURRENT_TIMESTAMP(),
   CONSTRAINT products_fk_brands
     FOREIGN KEY (brand_id)
     REFERENCES brands (brand_id)
@@ -34,7 +34,7 @@ CREATE TABLE orders (
     order_id      INT AUTO_INCREMENT    PRIMARY KEY,
     product_id    INT,
     quantity      INT,
-    order_date    TIMESTAMP             DEFAULT CURRENT_TIMESTAMP
+    order_date    TIMESTAMP             DEFAULT CURRENT_TIMESTAMP()
 );
 
 /********************************************************
@@ -46,7 +46,6 @@ INSERT INTO brands (brand_id, brand_name) VALUES
 (2, 'Adidas'),
 (3, 'Jordan'),
 (4, 'New Balance'),
-(5, 'Yeezy');
 
 INSERT INTO products (product_id, brand_id, product_name, description, market_price, discount_percent, quantity, date_added) VALUES
 -- Nike

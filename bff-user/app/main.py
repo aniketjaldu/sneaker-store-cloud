@@ -124,6 +124,7 @@ def get_filter_options():
             "sort_options": [
                 {"value": "name", "label": "Product Name"},
                 {"value": "price", "label": "Price"},
+                {"value": "description", "label": "Description"},
                 {"value": "brand", "label": "Brand"},
                 {"value": "discount", "label": "Discount %"},
                 {"value": "date_added", "label": "Date Added"}
