@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FaTrash, FaArrowLeft, FaShoppingBag, FaCreditCard } from 'react-icons/fa';
-import axios from 'axios';
+import api from '../utils/api';
 
 const Cart = () => {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchCart();
@@ -14,7 +16,7 @@ const Cart = () => {
 
   const fetchCart = async () => {
     try {
-      const response = await axios.get('/cart');
+      const response = await api.get('/cart');
       setCartItems(Array.isArray(response.data) ? response.data : [response.data]);
     } catch (error) {
       console.error('Error fetching cart:', error);
@@ -29,9 +31,9 @@ const Cart = () => {
     setUpdating(true);
     try {
       // Remove current item and add with new quantity
-      await axios.delete(`/cart/remove?product_id=${productId}`);
+      await api.delete(`/cart/remove?product_id=${productId}`);
       if (newQuantity > 0) {
-        await axios.post('/cart/add', null, {
+        await api.post('/cart/add', null, {
           params: { product_id: productId, quantity: newQuantity }
         });
       }
@@ -45,7 +47,7 @@ const Cart = () => {
 
   const removeItem = async (productId) => {
     try {
-      await axios.delete(`/cart/remove?product_id=${productId}`);
+      await api.delete(`/cart/remove?product_id=${productId}`);
       await fetchCart();
     } catch (error) {
       console.error('Error removing item:', error);
@@ -65,6 +67,28 @@ const Cart = () => {
 
   const calculateTotal = () => {
     return calculateSubtotal() + calculateTax();
+  };
+
+  const handleCheckout = async () => {
+    if (cartItems.length === 0) return;
+    
+    setCheckoutLoading(true);
+    try {
+      const response = await api.post('/orders', {});
+      if (response.data.order_id) {
+        // Redirect to orders page with success message
+        navigate('/orders', { 
+          state: { 
+            message: `Order #${response.data.order_id} placed successfully! Check your email for confirmation.` 
+          } 
+        });
+      }
+    } catch (error) {
+      console.error('Error creating order:', error);
+      alert('Failed to create order. Please try again.');
+    } finally {
+      setCheckoutLoading(false);
+    }
   };
 
   if (loading) {
@@ -226,9 +250,19 @@ const Cart = () => {
               </div>
 
               {/* Checkout Button */}
-              <button className="w-full bg-primary-500 text-white py-3 px-6 rounded-lg hover:bg-primary-600 transition-colors flex items-center justify-center space-x-2">
-                <FaCreditCard />
-                <span>Proceed to Checkout</span>
+              <button 
+                onClick={handleCheckout}
+                disabled={checkoutLoading || cartItems.length === 0}
+                className="w-full bg-primary-500 text-white py-3 px-6 rounded-lg hover:bg-primary-600 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {checkoutLoading ? (
+                  <div className="loading-spinner w-5 h-5"></div>
+                ) : (
+                  <>
+                    <FaCreditCard />
+                    <span>Proceed to Checkout</span>
+                  </>
+                )}
               </button>
 
               {/* Additional Info */}

@@ -67,6 +67,43 @@ def read_root():
 async def options_handler(full_path: str):
     return {}
 
+# Add explicit OPTIONS handlers for specific routes
+@app.options("/auth/login")
+async def options_login():
+    return {}
+
+@app.options("/auth/register")
+async def options_register():
+    return {}
+
+@app.options("/auth/request-password-reset")
+async def options_request_password_reset():
+    return {}
+
+@app.options("/auth/confirm-password-reset")
+async def options_confirm_password_reset():
+    return {}
+
+@app.options("/cart")
+async def options_cart():
+    return {}
+
+@app.options("/cart/add")
+async def options_cart_add():
+    return {}
+
+@app.options("/cart/remove")
+async def options_cart_remove():
+    return {}
+
+@app.options("/orders")
+async def options_orders():
+    return {}
+
+@app.options("/inventory")
+async def options_inventory():
+    return {}
+
 # ========== AUTHENTICATION ROUTES ==========
 @app.post("/auth/login")
 def login(login_data: LoginRequest):
