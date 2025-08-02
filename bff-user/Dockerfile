@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy the bff-user directory contents into the container
 COPY bff-user/ /app/
 
+# Copy the shared directory
+COPY shared/ /app/shared/
+
 # Install the dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
