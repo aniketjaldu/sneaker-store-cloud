@@ -1,21 +1,19 @@
-import sys
 import os
+import sys
+import mysql.connector
+import requests
+from typing import List, Optional
+
+from fastapi import FastAPI, HTTPException, Query, Body
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+# Add shared module to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from shared.models import connect_to_db, query_db, close_db, execute_db
-import mysql.connector
-from pydantic import BaseModel
 
-import fastapi
-from fastapi import HTTPException, Query
-from typing import Optional
-import requests
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 
-from pydantic import BaseModel
-from fastapi import Body
-
-app = fastapi.FastAPI()
+app = FastAPI()
 
 
 DB_CONFIG = {
@@ -444,11 +442,6 @@ async def list_product_info(product_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 # GET Custom Product Search
-from fastapi import APIRouter, Query, HTTPException, Depends
-from typing import List, Optional
-import mysql.connector
-
-
 @app.get("/inventory/stats")
 def get_custom_inventory(
     columns: List[str] = Query(..., description="Columns to select, e.g., product_name, market_price, brand_id"),
