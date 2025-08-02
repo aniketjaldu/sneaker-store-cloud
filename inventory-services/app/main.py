@@ -184,15 +184,13 @@ async def update_product(product_id: int, product: ProductUpdate = Body(...)):
         cursor.execute(query, tuple(values))
         conn.commit()
 
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Product not found")
-
         close_db(conn)
+        if cursor.rowcount == 0:
+            return {"message": "No fields changed. Product data remains the same."}
         return {"message": "Product updated successfully"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # DELETE product
 @app.delete("/admin/products/delete/{product_id}")
