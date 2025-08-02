@@ -12,29 +12,17 @@ from pydantic import BaseModel
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 from shared.models import connect_to_db, query_db, close_db, execute_db
 
-
 app = FastAPI()
-
-
-DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",
-    "password": "inventorypassword",
-    "database": "inventory_database",
-    "port": 3307
-}
 
 def connect_inventory_db():
     return connect_to_db("inventory-db", "root", "inventorypassword", "inventory_database", "3306")
-
-
 
 @app.get("/")
 def health_check():
     return {"message": "Inventory FastAPI service is operational."}
 
-# ================== ADMIN ROUTES ==================
 
+# ================== ADMIN ROUTES ==================
 
 # ============= Product Management Routes =============
 
@@ -175,40 +163,6 @@ class ProductUpdate(BaseModel):
 
 @app.put("/admin/products/{product_id}")
 async def update_product(product_id: int, product: ProductUpdate = Body(...)):
-    try:
-        conn = connect_inventory_db()
-        cursor = conn.cursor()
-
-        # Build SET clause dynamically
-        fields = []
-        values = []
-
-        for field, value in product.dict(exclude_unset=True).items():
-            fields.append(f"{field} = %s")
-            values.append(value)
-
-        if not fields:
-            raise HTTPException(status_code=400, detail="No fields provided for update.")
-
-        values.append(product_id)
-        query = f"UPDATE products SET {', '.join(fields)} WHERE product_id = %s"
-
-        cursor.execute(query, tuple(values))
-        conn.commit()
-
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Product not found")
-
-        close_db(conn)
-        return {"message": "Product updated successfully"}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# PUT Update Product placeholder
-@app.put("/admin/productsss/{product_id}")
-async def update_productt(product_id: int, product: ProductUpdate = Body(...)):
     try:
         conn = connect_inventory_db()
         cursor = conn.cursor()
