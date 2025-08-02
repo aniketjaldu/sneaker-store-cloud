@@ -48,6 +48,15 @@ CREATE TABLE refresh_tokens (
     FOREIGN KEY (user_id) REFERENCES users (user_id)
 );
 
+CREATE TABLE password_reset_tokens (
+    token_id                INT             PRIMARY KEY     AUTO_INCREMENT,
+    user_id                 INT             NOT NULL,
+    token_hash              VARCHAR(255)    NOT NULL        UNIQUE,
+    expires_at              DATETIME        NOT NULL,
+    created_at              DATETIME        NOT NULL        DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
+);
+
 CREATE TABLE payment_methods (
     payment_method_id       INT             PRIMARY KEY     AUTO_INCREMENT,
     user_id                 INT             NOT NULL,

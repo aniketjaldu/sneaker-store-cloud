@@ -3,6 +3,7 @@ import requests
 from fastapi import HTTPException, Query, Header, Depends
 from typing import Optional
 from pydantic import BaseModel
+from shared.email_utils import send_email, create_order_confirmation_email_content, create_password_reset_email_content
 
 app = fastapi.FastAPI()
 
@@ -19,6 +20,13 @@ class UserRegistration(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirmRequest(BaseModel):
+    reset_token: str
+    new_password: str
 
 # Authentication dependency
 async def get_current_user(authorization: str = Header(None)):
@@ -76,6 +84,52 @@ def register(user_data: UserRegistration):
     try:
         # Call user service to create account
         response = requests.post("http://user-service:8080/users/register", json=user_data.dict())
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="User service unavailable")
+
+@app.post("/auth/request-password-reset")
+def request_password_reset(reset_request: PasswordResetRequest):
+    try:
+        # Call user service to request password reset
+        response = requests.post("http://user-service:8080/users/request-password-reset", json=reset_request.dict())
+        reset_result = response.json()
+        
+        if response.status_code != 200:
+            return reset_result
+        
+        # If password reset was successful, we need to send the email
+        # The user service should return the user_id and reset_token
+        user_id = reset_result.get("user_id")
+        reset_token = reset_result.get("reset_token")
+        
+        if user_id and reset_token:
+            # Get user info for email
+            user_response = requests.get(f"http://user-service:8080/users/{user_id}")
+            if user_response.status_code == 200:
+                user_info = user_response.json()
+                
+                # Send password reset email
+                try:
+                    subject, body, html_body = create_password_reset_email_content(user_info, reset_token)
+                    email_sent = send_email(user_info["email"], subject, body, html_body)
+                    if email_sent:
+                        print(f"Password reset email sent to {user_info['email']}")
+                    else:
+                        print(f"Failed to send password reset email to {user_info['email']}")
+                except Exception as e:
+                    print(f"Error sending password reset email: {e}")
+        
+        return reset_result
+        
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="User service unavailable")
+
+@app.post("/auth/confirm-password-reset")
+def confirm_password_reset(confirm_request: PasswordResetConfirmRequest):
+    try:
+        # Call user service to confirm password reset
+        response = requests.post("http://user-service:8080/users/confirm-password-reset", json=confirm_request.dict())
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
@@ -217,8 +271,7 @@ def get_cart(current_user: dict = Depends(get_current_user)):
 def add_to_cart(product_id: int = Query(...), quantity: int = Query(1), current_user: dict = Depends(get_current_user)):
     try:
         user_id = current_user["sub"]
-        cart_data = {"product_id": product_id, "quantity": quantity}
-        response = requests.post(f"http://user-service:8080/users/{user_id}/cart", json=cart_data)
+        response = requests.post(f"http://user-service:8080/users/{user_id}/cart/{product_id}?quantity={quantity}")
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
@@ -306,7 +359,69 @@ def get_order_details(order_id: int, current_user: dict = Depends(get_current_us
 def create_order(order_data: dict = {}, current_user: dict = Depends(get_current_user)):
     try:
         user_id = current_user["sub"]
+        
+        # Create order in user service
         response = requests.post(f"http://user-service:8080/users/{user_id}/orders", json=order_data)
-        return response.json()
+        order_result = response.json()
+        
+        if response.status_code != 200:
+            return order_result
+        
+        # Get order details for email
+        order_id = order_result.get("order_id")
+        if not order_id:
+            return order_result
+        
+        # Get user info
+        user_response = requests.get(f"http://user-service:8080/users/{user_id}")
+        if user_response.status_code != 200:
+            return order_result
+        
+        user_info = user_response.json()
+        
+        # Get order details with items
+        order_response = requests.get(f"http://user-service:8080/users/{user_id}/orders/{order_id}")
+        if order_response.status_code != 200:
+            return order_result
+        
+        order_info = order_response.json()
+        
+        # Get product details for each item
+        items_with_details = []
+        total_amount = 0.0
+        
+        for item in order_info.get("items", []):
+            try:
+                product_response = requests.get(f"http://inventory-service:8080/products/{item['product_id']}")
+                if product_response.status_code == 200:
+                    product_info = product_response.json()
+                    # Calculate final price with discount
+                    final_price = product_info["market_price"] * (1 - product_info.get("discount_percent", 0) / 100)
+                    item_total = final_price * item["quantity"]
+                    total_amount += item_total
+                    
+                    items_with_details.append({
+                        "product_name": product_info["product_name"],
+                        "brand_name": product_info.get("brand_name", "Unknown"),
+                        "quantity": item["quantity"],
+                        "unit_price": final_price,
+                        "item_total": item_total
+                    })
+            except requests.RequestException:
+                pass
+        
+        # Send order confirmation email
+        try:
+            subject, body, html_body = create_order_confirmation_email_content(user_info, order_info, items_with_details, total_amount)
+            email_sent = send_email(user_info["email"], subject, body, html_body)
+            if email_sent:
+                print(f"Order confirmation email sent for order {order_id}")
+            else:
+                print(f"Failed to send order confirmation email for order {order_id}")
+        except Exception as e:
+            print(f"Error sending order confirmation email: {e}")
+        
+        return order_result
+        
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
