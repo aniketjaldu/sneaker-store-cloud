@@ -160,6 +160,9 @@ services:
       HOSTNAME: mail.sneaker.local
     volumes:
       - postfix_data:/var/spool/postfix
+    networks:
+      user-network:
+      admin-network:
 
 volumes:
   user-db-data:
