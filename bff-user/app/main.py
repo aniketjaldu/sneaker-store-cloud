@@ -1,11 +1,22 @@
 import fastapi
 import requests
 from fastapi import HTTPException, Query, Header, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
 from pydantic import BaseModel
 from shared.email_utils import send_email, create_order_confirmation_email_content, create_password_reset_email_content
 
 app = fastapi.FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 # Data models for request/response
 class LoginRequest(BaseModel):
@@ -51,6 +62,48 @@ async def get_current_user(authorization: str = Header(None)):
 def read_root():
     return {"message": "User BFF is running"}
 
+# Handle OPTIONS requests for CORS preflight
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    return {}
+
+# Add explicit OPTIONS handlers for specific routes
+@app.options("/auth/login")
+async def options_login():
+    return {}
+
+@app.options("/auth/register")
+async def options_register():
+    return {}
+
+@app.options("/auth/request-password-reset")
+async def options_request_password_reset():
+    return {}
+
+@app.options("/auth/confirm-password-reset")
+async def options_confirm_password_reset():
+    return {}
+
+@app.options("/cart")
+async def options_cart():
+    return {}
+
+@app.options("/cart/add")
+async def options_cart_add():
+    return {}
+
+@app.options("/cart/remove")
+async def options_cart_remove():
+    return {}
+
+@app.options("/orders")
+async def options_orders():
+    return {}
+
+@app.options("/inventory")
+async def options_inventory():
+    return {}
+
 # ========== AUTHENTICATION ROUTES ==========
 @app.post("/auth/login")
 def login(login_data: LoginRequest):
@@ -66,6 +119,16 @@ def refresh_token(refresh_data: RefreshRequest):
     try:
         # Call IDP service for token refresh
         response = requests.post("http://idp-service:8080/refresh", json=refresh_data.dict())
+        return response.json()
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Authentication service unavailable")
+
+@app.post("/auth/verify")
+def verify_token(authorization: str = Header(None)):
+    try:
+        # Call IDP service to verify token
+        response = requests.post("http://idp-service:8080/verify", 
+                               headers={"Authorization": authorization})
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")

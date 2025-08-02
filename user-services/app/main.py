@@ -4,12 +4,23 @@ import hashlib
 import datetime
 import secrets
 from fastapi import HTTPException, Request, Query, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from shared.models import connect_to_db, query_db, close_db, execute_db
 
 
 app = fastapi.FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 class UserCreateRequest(BaseModel):
     first_name: str
