@@ -172,12 +172,14 @@ async def verify_refresh_token(token_request: RefreshTokenRequest):
         conn = connect_user_db()
         
         # Check if refresh token exists and is not expired
+        from datetime import datetime, timezone
+        utc_now = datetime.now(timezone.utc)
         query = """
             SELECT token_id, user_id, expires_at
             FROM refresh_tokens
-            WHERE token_hash = %s AND expires_at > NOW()
+            WHERE token_hash = %s AND expires_at > %s
         """
-        result = query_db(conn, query, (token_request.token_hash,))
+        result = query_db(conn, query, (token_request.token_hash, utc_now))
         close_db(conn)
         
         if not result:
@@ -288,11 +290,13 @@ async def confirm_password_reset(confirm_request: PasswordResetConfirmRequest):
         token_hash = hashlib.sha256(confirm_request.reset_token.encode()).hexdigest()
         
         # Check if reset token exists and is not expired
+        from datetime import datetime, timezone
+        utc_now = datetime.now(timezone.utc)
         check_query = """
             SELECT user_id FROM password_reset_tokens
-            WHERE token_hash = %s AND expires_at > NOW()
+            WHERE token_hash = %s AND expires_at > %s
         """
-        result = query_db(conn, check_query, (token_hash,))
+        result = query_db(conn, check_query, (token_hash, utc_now))
         
         if not result:
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
@@ -387,14 +391,33 @@ def get_user_info():
 async def get_user_profile(user_id: int):
     try:   
         conn = connect_user_db()
-        query = "SELECT * FROM users WHERE user_id = %s"
-        result = query_db(conn, query, (user_id,))
-        close_db(conn)
-
-        if not result:
+        
+        # Get user information
+        user_query = "SELECT * FROM users WHERE user_id = %s"
+        user_result = query_db(conn, user_query, (user_id,))
+        
+        if not user_result:
+            close_db(conn)
             raise HTTPException(status_code=404, detail="User not found")
-    
-        return result[0]
+        
+        user = user_result[0]
+        
+        # Get shipping address if exists
+        if user.get("shipping_address_id"):
+            shipping_query = "SELECT * FROM addresses WHERE address_id = %s"
+            shipping_result = query_db(conn, shipping_query, (user["shipping_address_id"],))
+            if shipping_result:
+                user["shipping_address"] = shipping_result[0]
+        
+        # Get billing address if exists
+        if user.get("billing_address_id"):
+            billing_query = "SELECT * FROM addresses WHERE address_id = %s"
+            billing_result = query_db(conn, billing_query, (user["billing_address_id"],))
+            if billing_result:
+                user["billing_address"] = billing_result[0]
+        
+        close_db(conn)
+        return user
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -407,15 +430,81 @@ async def update_user_profile(user_id: int, request: Request):
         if not profile_data:
             raise HTTPException(status_code=400, detail="No profile data provided")
         
-        set_clause = ", ".join(f"{key} = %s" for key in profile_data.keys())
-        values = list(profile_data.values())
-        values.append(user_id)
-
         conn = connect_user_db()
-        query = f"UPDATE users SET {set_clause} where user_id = %s"
-        execute_db(conn, query, values)
+        
+        # Handle user profile updates
+        user_updates = {}
+        address_updates = {}
+        
+        for key, value in profile_data.items():
+            if key in ["first_name", "last_name", "email"]:
+                user_updates[key] = value
+            elif key == "phone":
+                address_updates["phone"] = value
+            elif key == "address_line1":
+                address_updates["line1"] = value
+            elif key == "address_line2":
+                address_updates["line2"] = value
+            elif key == "address_city":
+                address_updates["city"] = value
+            elif key == "address_state":
+                address_updates["state"] = value
+            elif key == "address_zip_code":
+                address_updates["zip_code"] = value
+        
+        # Update user information
+        if user_updates:
+            set_clause = ", ".join(f"{key} = %s" for key in user_updates.keys())
+            values = list(user_updates.values())
+            values.append(user_id)
+            user_query = f"UPDATE users SET {set_clause} WHERE user_id = %s"
+            execute_db(conn, user_query, values)
+        
+        # Handle address updates
+        if address_updates:
+            # Get current user to see if they have addresses
+            user_query = "SELECT shipping_address_id, billing_address_id FROM users WHERE user_id = %s"
+            user_result = query_db(conn, user_query, (user_id,))
+            
+            if user_result:
+                user = user_result[0]
+                shipping_address_id = user.get("shipping_address_id")
+                billing_address_id = user.get("billing_address_id")
+                
+                # Update shipping address (use shipping as primary address for now)
+                if shipping_address_id:
+                    # Handle empty line2 properly
+                    if "line2" in address_updates and address_updates["line2"] == "":
+                        address_updates["line2"] = None
+                    
+                    set_clause = ", ".join(f"{key} = %s" for key in address_updates.keys())
+                    values = list(address_updates.values())
+                    values.append(shipping_address_id)
+                    address_query = f"UPDATE addresses SET {set_clause} WHERE address_id = %s"
+                    execute_db(conn, address_query, values)
+                else:
+                    # Create new shipping address
+                    address_fields = ["line1", "line2", "city", "state", "zip_code", "phone"]
+                    address_values = [address_updates.get(field, "") for field in address_fields]
+                    
+                    # Handle empty line2 properly
+                    if address_values[1] == "":
+                        address_values[1] = None
+                    
+                    insert_query = """
+                        INSERT INTO addresses (line1, line2, city, state, zip_code, phone)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor = conn.cursor()
+                    cursor.execute(insert_query, address_values)
+                    new_address_id = cursor.lastrowid
+                    
+                    # Update user to reference new address
+                    update_query = "UPDATE users SET shipping_address_id = %s WHERE user_id = %s"
+                    execute_db(conn, update_query, (new_address_id, user_id))
+                    cursor.close()
+        
         close_db(conn)
-
         return {"message": "User profile updated successfully"}
 
     except Exception as e:
@@ -939,6 +1028,8 @@ async def create_order(user_id: int, request: Request):
         
         # Get order data from request (provided by BFF)
         order_data = await request.json()
+        subtotal_amount = order_data.get("subtotal_amount", 0.0)
+        tax_amount = order_data.get("tax_amount", 0.0)
         total_amount = order_data.get("total_amount", 0.0)
         order_items_data = order_data.get("order_items", [])
         
@@ -952,10 +1043,13 @@ async def create_order(user_id: int, request: Request):
                     "total_price": 0.0
                 })
         
-        # Create order with calculated total amount
-        order_query = "INSERT INTO orders (user_id, order_date, email, total_amount) VALUES (%s, NOW(), %s, %s)"
+        # Create order with calculated amounts including tax
+        # Use UTC time for order_date
+        from datetime import datetime, timezone
+        utc_now = datetime.now(timezone.utc)
+        order_query = "INSERT INTO orders (user_id, order_date, email, subtotal_amount, tax_amount, total_amount) VALUES (%s, %s, %s, %s, %s, %s)"
         cursor = conn.cursor()
-        cursor.execute(order_query, (user_id, user_email, total_amount))
+        cursor.execute(order_query, (user_id, utc_now, user_email, subtotal_amount, tax_amount, total_amount))
         order_id = cursor.lastrowid
 
         # Add order items with actual prices

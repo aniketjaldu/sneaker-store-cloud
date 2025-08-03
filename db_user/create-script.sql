@@ -76,6 +76,8 @@ CREATE TABLE orders (
     shipping_address_id     INT             DEFAULT NULL,
     billing_address_id      INT             DEFAULT NULL,
     email                   VARCHAR(255)    NOT NULL,
+    subtotal_amount         DECIMAL(10,2)   NOT NULL,
+    tax_amount              DECIMAL(10,2)   NOT NULL,
     total_amount            DECIMAL(10,2)   NOT NULL,
     order_status            ENUM('pending', 'processing', 'shipped', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
     payment_method_id       INT             DEFAULT NULL,
@@ -147,10 +149,10 @@ INSERT INTO payment_methods (payment_method_id, user_id, billing_address_id, car
     (5, 5, 5, '3456', 'Visa', 1, 2029);
 
 -- Sample orders
-INSERT INTO orders (order_id, user_id, order_date, shipping_address_id, billing_address_id, email, total_amount, order_status, payment_method_id) VALUES
-    (1, 5, '2024-01-15 10:30:00', 1, 1, 'alice.johnson@example.com', 129.99, 'delivered', 1),
-    (2, 6, '2024-01-20 14:15:00', 2, 2, 'bob.smith@example.com', 179.99, 'shipped', 2),
-    (3, 7, '2024-01-25 09:45:00', 3, 3, 'carol.davis@example.com', 99.99, 'processing', 3);
+INSERT INTO orders (order_id, user_id, order_date, shipping_address_id, billing_address_id, email, subtotal_amount, tax_amount, total_amount, order_status, payment_method_id) VALUES
+    (1, 5, '2024-01-15 10:30:00', 1, 1, 'alice.johnson@example.com', 122.34, 7.65, 129.99, 'delivered', 1),
+    (2, 6, '2024-01-20 14:15:00', 2, 2, 'bob.smith@example.com', 169.40, 10.59, 179.99, 'shipped', 2),
+    (3, 7, '2024-01-25 09:45:00', 3, 3, 'carol.davis@example.com', 94.11, 5.88, 99.99, 'processing', 3);
 
 -- Sample order items
 INSERT INTO order_items (order_item_id, order_id, product_id, quantity, unit_price, total_price) VALUES

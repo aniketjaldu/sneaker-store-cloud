@@ -40,6 +40,10 @@ def create_order_confirmation_email_content(user_info: Dict, order_info: Dict, i
     order_id = order_info.get('order_id', 'Unknown')
     subject = f"Order Confirmation - Order #{order_id} from SneakerSpot"
     
+    # Calculate subtotal and tax
+    subtotal = sum(item['item_total'] for item in items_with_details)
+    tax_amount = round(subtotal * 0.0625, 2)
+    
     # Plain text body
     body = f"Hi {user_info['first_name']},\n\n"
     body += "Thank you for your purchase! Here are the details of your order:\n\n"
@@ -47,7 +51,9 @@ def create_order_confirmation_email_content(user_info: Dict, order_info: Dict, i
     for item in items_with_details:
         body += f"- {item['brand_name']} {item['product_name']}: {item['quantity']} x ${item['unit_price']:.2f} = ${item['item_total']:.2f}\n"
     
-    body += f"\nTotal: ${total_amount:.2f}\n"
+    body += f"\nSubtotal: ${subtotal:.2f}\n"
+    body += f"Tax (6.25%): ${tax_amount:.2f}\n"
+    body += f"Total: ${total_amount:.2f}\n"
     body += "\nYour order is being processed. You'll receive another email when it's shipped.\n\n"
     body += "Thank you for shopping with us!\nSneakerSpot Team"
     
@@ -79,6 +85,8 @@ def create_order_confirmation_email_content(user_info: Dict, order_info: Dict, i
     
     html_body += f"""
         </table>
+        <p><strong>Subtotal: ${subtotal:.2f}</strong></p>
+        <p><strong>Tax (6.25%): ${tax_amount:.2f}</strong></p>
         <p><strong>Total: ${total_amount:.2f}</strong></p>
         <p>Your order is being processed. You'll receive another email when it's shipped.</p>
         <p>Thank you for shopping with us!<br>SneakerSpot Team</p>

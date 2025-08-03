@@ -62,7 +62,7 @@ const Cart = () => {
   };
 
   const calculateTax = () => {
-    return Math.round(calculateSubtotal() * 0.08 * 100) / 100; // 8% tax, rounded to 2 decimal places
+    return Math.round(calculateSubtotal() * 0.0625 * 100) / 100;
   };
 
   const calculateTotal = () => {
@@ -233,7 +233,7 @@ const Cart = () => {
                   <span className="font-medium">${calculateSubtotal().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Tax (8%)</span>
+                  <span className="text-gray-600">Tax (6.25%)</span>
                   <span className="font-medium">${calculateTax().toFixed(2)}</span>
                 </div>
                 <div className="border-t pt-3">
