@@ -4,12 +4,23 @@ import hashlib
 import datetime
 import secrets
 from fastapi import HTTPException, Request, Query, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from shared.models import connect_to_db, query_db, close_db, execute_db
 
 
 app = fastapi.FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+)
 
 class UserCreateRequest(BaseModel):
     first_name: str
@@ -161,12 +172,14 @@ async def verify_refresh_token(token_request: RefreshTokenRequest):
         conn = connect_user_db()
         
         # Check if refresh token exists and is not expired
+        from datetime import datetime, timezone
+        utc_now = datetime.now(timezone.utc)
         query = """
             SELECT token_id, user_id, expires_at
             FROM refresh_tokens
-            WHERE token_hash = %s AND expires_at > NOW()
+            WHERE token_hash = %s AND expires_at > %s
         """
-        result = query_db(conn, query, (token_request.token_hash,))
+        result = query_db(conn, query, (token_request.token_hash, utc_now))
         close_db(conn)
         
         if not result:
@@ -277,11 +290,13 @@ async def confirm_password_reset(confirm_request: PasswordResetConfirmRequest):
         token_hash = hashlib.sha256(confirm_request.reset_token.encode()).hexdigest()
         
         # Check if reset token exists and is not expired
+        from datetime import datetime, timezone
+        utc_now = datetime.now(timezone.utc)
         check_query = """
             SELECT user_id FROM password_reset_tokens
-            WHERE token_hash = %s AND expires_at > NOW()
+            WHERE token_hash = %s AND expires_at > %s
         """
-        result = query_db(conn, check_query, (token_hash,))
+        result = query_db(conn, check_query, (token_hash, utc_now))
         
         if not result:
             raise HTTPException(status_code=400, detail="Invalid or expired reset token")
@@ -376,14 +391,33 @@ def get_user_info():
 async def get_user_profile(user_id: int):
     try:   
         conn = connect_user_db()
-        query = "SELECT * FROM users WHERE user_id = %s"
-        result = query_db(conn, query, (user_id,))
-        close_db(conn)
-
-        if not result:
+        
+        # Get user information
+        user_query = "SELECT * FROM users WHERE user_id = %s"
+        user_result = query_db(conn, user_query, (user_id,))
+        
+        if not user_result:
+            close_db(conn)
             raise HTTPException(status_code=404, detail="User not found")
-    
-        return result[0]
+        
+        user = user_result[0]
+        
+        # Get shipping address if exists
+        if user.get("shipping_address_id"):
+            shipping_query = "SELECT * FROM addresses WHERE address_id = %s"
+            shipping_result = query_db(conn, shipping_query, (user["shipping_address_id"],))
+            if shipping_result:
+                user["shipping_address"] = shipping_result[0]
+        
+        # Get billing address if exists
+        if user.get("billing_address_id"):
+            billing_query = "SELECT * FROM addresses WHERE address_id = %s"
+            billing_result = query_db(conn, billing_query, (user["billing_address_id"],))
+            if billing_result:
+                user["billing_address"] = billing_result[0]
+        
+        close_db(conn)
+        return user
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -396,15 +430,81 @@ async def update_user_profile(user_id: int, request: Request):
         if not profile_data:
             raise HTTPException(status_code=400, detail="No profile data provided")
         
-        set_clause = ", ".join(f"{key} = %s" for key in profile_data.keys())
-        values = list(profile_data.values())
-        values.append(user_id)
-
         conn = connect_user_db()
-        query = f"UPDATE users SET {set_clause} where user_id = %s"
-        execute_db(conn, query, values)
+        
+        # Handle user profile updates
+        user_updates = {}
+        address_updates = {}
+        
+        for key, value in profile_data.items():
+            if key in ["first_name", "last_name", "email"]:
+                user_updates[key] = value
+            elif key == "phone":
+                address_updates["phone"] = value
+            elif key == "address_line1":
+                address_updates["line1"] = value
+            elif key == "address_line2":
+                address_updates["line2"] = value
+            elif key == "address_city":
+                address_updates["city"] = value
+            elif key == "address_state":
+                address_updates["state"] = value
+            elif key == "address_zip_code":
+                address_updates["zip_code"] = value
+        
+        # Update user information
+        if user_updates:
+            set_clause = ", ".join(f"{key} = %s" for key in user_updates.keys())
+            values = list(user_updates.values())
+            values.append(user_id)
+            user_query = f"UPDATE users SET {set_clause} WHERE user_id = %s"
+            execute_db(conn, user_query, values)
+        
+        # Handle address updates
+        if address_updates:
+            # Get current user to see if they have addresses
+            user_query = "SELECT shipping_address_id, billing_address_id FROM users WHERE user_id = %s"
+            user_result = query_db(conn, user_query, (user_id,))
+            
+            if user_result:
+                user = user_result[0]
+                shipping_address_id = user.get("shipping_address_id")
+                billing_address_id = user.get("billing_address_id")
+                
+                # Update shipping address (use shipping as primary address for now)
+                if shipping_address_id:
+                    # Handle empty line2 properly
+                    if "line2" in address_updates and address_updates["line2"] == "":
+                        address_updates["line2"] = None
+                    
+                    set_clause = ", ".join(f"{key} = %s" for key in address_updates.keys())
+                    values = list(address_updates.values())
+                    values.append(shipping_address_id)
+                    address_query = f"UPDATE addresses SET {set_clause} WHERE address_id = %s"
+                    execute_db(conn, address_query, values)
+                else:
+                    # Create new shipping address
+                    address_fields = ["line1", "line2", "city", "state", "zip_code", "phone"]
+                    address_values = [address_updates.get(field, "") for field in address_fields]
+                    
+                    # Handle empty line2 properly
+                    if address_values[1] == "":
+                        address_values[1] = None
+                    
+                    insert_query = """
+                        INSERT INTO addresses (line1, line2, city, state, zip_code, phone)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor = conn.cursor()
+                    cursor.execute(insert_query, address_values)
+                    new_address_id = cursor.lastrowid
+                    
+                    # Update user to reference new address
+                    update_query = "UPDATE users SET shipping_address_id = %s WHERE user_id = %s"
+                    execute_db(conn, update_query, (new_address_id, user_id))
+                    cursor.close()
+        
         close_db(conn)
-
         return {"message": "User profile updated successfully"}
 
     except Exception as e:
@@ -621,8 +721,109 @@ async def update_user_role(user_id: int, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-  
+
+# ========== ADMIN ORDER ROUTES ==========
+@app.get("/admin/orders")
+async def get_all_orders():
+    try:
+        conn = connect_user_db()
+        
+        # Get all orders with user information
+        query = """
+            SELECT o.*, u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            ORDER BY o.order_date DESC
+        """
+        orders = query_db(conn, query)
+        
+        # For each order, get order items
+        for order in orders:
+            items_query = """
+                SELECT product_id, quantity, unit_price, total_price
+                FROM order_items
+                WHERE order_id = %s
+            """
+            items = query_db(conn, items_query, (order["order_id"],))
+            order["items"] = items
+        
+        close_db(conn)
+        return orders
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/orders/{order_id}")
+async def get_admin_order_details(order_id: int):
+    try:
+        conn = connect_user_db()
+        
+        # Get the order with user information
+        order_query = """
+            SELECT o.*, u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            WHERE o.order_id = %s
+        """
+        order_result = query_db(conn, order_query, (order_id,))
+        if not order_result:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        order = order_result[0]
+        
+        # Get order items
+        items_query = """
+            SELECT product_id, quantity, unit_price, total_price
+            FROM order_items
+            WHERE order_id = %s
+        """
+        items = query_db(conn, items_query, (order_id,))
+        order["items"] = items
+        
+        close_db(conn)
+        return order
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== ORDER MANAGEMENT ==========
+@app.put("/admin/orders/{order_id}/status")
+async def update_admin_order_status(order_id: int, request: Request):
+    try:
+        data = await request.json()
+        new_status = data.get("status")
+        
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        conn = connect_user_db()
+        
+        # Get current order status
+        current_status_query = "SELECT order_status FROM orders WHERE order_id = %s"
+        current_result = query_db(conn, current_status_query, (order_id,))
+        if not current_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        current_status = current_result[0]["order_status"]
+        
+        # Update order status
+        update_query = "UPDATE orders SET order_status = %s WHERE order_id = %s"
+        execute_db(conn, update_query, (new_status, order_id))
+        
+        # Get order items for stock management
+        items_query = "SELECT product_id, quantity FROM order_items WHERE order_id = %s"
+        order_items = query_db(conn, items_query, (order_id,))
+        
+        close_db(conn)
+        return {"message": f"Order status updated to '{new_status}' successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ========== SHOPPING CART ==========
 # GET /users/{user_id}/cart
@@ -802,7 +1003,7 @@ async def get_order_details(user_id: int, order_id: int):
 
 # Create order from cart (checkout)
 @app.post("/users/{user_id}/orders")
-async def create_order(user_id: int):
+async def create_order(user_id: int, request: Request):
     try:
         conn = connect_user_db()
 
@@ -825,22 +1026,45 @@ async def create_order(user_id: int):
         
         user_email = user_result[0]["email"]
         
-        # Create order with required fields
-        order_query = "INSERT INTO orders (user_id, order_date, email, total_amount) VALUES (%s, NOW(), %s, %s)"
+        # Get order data from request (provided by BFF)
+        order_data = await request.json()
+        subtotal_amount = order_data.get("subtotal_amount", 0.0)
+        tax_amount = order_data.get("tax_amount", 0.0)
+        total_amount = order_data.get("total_amount", 0.0)
+        order_items_data = order_data.get("order_items", [])
+        
+        # If no order data provided, use placeholder values
+        if not order_items_data:
+            for item in cart_items:
+                order_items_data.append({
+                    "product_id": item["product_id"],
+                    "quantity": item["quantity"],
+                    "unit_price": 0.0,
+                    "total_price": 0.0
+                })
+        
+        # Create order with calculated amounts including tax
+        # Use UTC time for order_date
+        from datetime import datetime, timezone
+        utc_now = datetime.now(timezone.utc)
+        order_query = "INSERT INTO orders (user_id, order_date, email, subtotal_amount, tax_amount, total_amount) VALUES (%s, %s, %s, %s, %s, %s)"
         cursor = conn.cursor()
-        cursor.execute(order_query, (user_id, user_email, 0.0))  # Placeholder total_amount
+        cursor.execute(order_query, (user_id, utc_now, user_email, subtotal_amount, tax_amount, total_amount))
         order_id = cursor.lastrowid
 
-        # Add order items
-        for item in cart_items:
+        # Add order items with actual prices
+        for item_data in order_items_data:
             item_query = """
                 INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price)
                 VALUES (%s, %s, %s, %s, %s)
             """
-            # Placeholder price (e.g., 0.0), replace with actual pricing logic later
-            unit_price = 0.0
-            total_price = unit_price * item["quantity"]
-            execute_db(conn, item_query, (order_id, item["product_id"], item["quantity"], unit_price, total_price))
+            execute_db(conn, item_query, (
+                order_id, 
+                item_data["product_id"], 
+                item_data["quantity"], 
+                item_data["unit_price"], 
+                item_data["total_price"]
+            ))
 
         # Clear cart
         clear_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
@@ -850,11 +1074,157 @@ async def create_order(user_id: int):
         cursor.close()
         close_db(conn)
 
-
-
         return {"message": "Order placed successfully", "order_id": order_id}
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== ANALYTICS ROUTES ==========
+@app.get("/admin/analytics/users")
+async def get_user_analytics():
+    try:
+        conn = connect_user_db()
+        
+        # Get total users
+        total_users_query = "SELECT COUNT(*) as total_users FROM users"
+        total_users_result = query_db(conn, total_users_query)
+        total_users = total_users_result[0]["total_users"] if total_users_result else 0
+        
+        # Get users by role
+        role_query = """
+            SELECT role, COUNT(*) as count
+            FROM users u
+            INNER JOIN user_roles ur ON u.user_id = ur.user_id
+            GROUP BY role
+        """
+        role_results = query_db(conn, role_query)
+        
+        # Calculate active users (users with orders in last 30 days)
+        from datetime import datetime, timedelta
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        active_users_query = """
+            SELECT COUNT(DISTINCT user_id) as active_users
+            FROM orders
+            WHERE order_date >= %s
+        """
+        active_users_result = query_db(conn, active_users_query, (thirty_days_ago,))
+        active_users = active_users_result[0]["active_users"] if active_users_result else 0
+        
+        # Get new users today (approximate - using order_date as proxy)
+        today = datetime.now().date()
+        new_users_query = """
+            SELECT COUNT(*) as new_users_today
+            FROM users u
+            WHERE EXISTS (
+                SELECT 1 FROM orders o 
+                WHERE o.user_id = u.user_id 
+                AND DATE(o.order_date) = %s
+            )
+        """
+        new_users_result = query_db(conn, new_users_query, (today,))
+        new_users_today = new_users_result[0]["new_users_today"] if new_users_result else 0
+        
+        close_db(conn)
+        
+        return {
+            "total_users": total_users,
+            "active_users": active_users,
+            "new_users_today": new_users_today,
+            "users_by_role": {row["role"]: row["count"] for row in role_results}
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/analytics/sales")
+async def get_sales_analytics(
+    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
+):
+    try:
+        conn = connect_user_db()
+        
+        # Build date filter
+        date_filter = ""
+        params = []
+        if date_from and date_to:
+            date_filter = "WHERE order_date BETWEEN %s AND %s"
+            params = [date_from, date_to]
+        elif date_from:
+            date_filter = "WHERE order_date >= %s"
+            params = [date_from]
+        elif date_to:
+            date_filter = "WHERE order_date <= %s"
+            params = [date_to]
+        
+        # Get total sales
+        total_sales_query = f"""
+            SELECT 
+                SUM(total_amount) as total_sales,
+                COUNT(*) as total_orders,
+                AVG(total_amount) as avg_order_value
+            FROM orders
+            {date_filter}
+        """
+        sales_result = query_db(conn, total_sales_query, tuple(params))
+        
+        if sales_result and sales_result[0]["total_sales"]:
+            total_sales = float(sales_result[0]["total_sales"])
+            total_orders = sales_result[0]["total_orders"]
+            avg_order_value = float(sales_result[0]["avg_order_value"])
+        else:
+            total_sales = 0.0
+            total_orders = 0
+            avg_order_value = 0.0
+        
+        # Get sales by status
+        status_query = f"""
+            SELECT 
+                order_status,
+                COUNT(*) as count,
+                SUM(total_amount) as total
+            FROM orders
+            {date_filter}
+            GROUP BY order_status
+        """
+        status_results = query_db(conn, status_query, tuple(params))
+        
+        # Get top customers
+        top_customers_query = f"""
+            SELECT 
+                u.first_name,
+                u.last_name,
+                u.email,
+                COUNT(o.order_id) as order_count,
+                SUM(o.total_amount) as total_spent
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            {date_filter}
+            GROUP BY o.user_id, u.first_name, u.last_name, u.email
+            ORDER BY total_spent DESC
+            LIMIT 5
+        """
+        top_customers = query_db(conn, top_customers_query, tuple(params))
+        
+        close_db(conn)
+        
+        return {
+            "total_sales": total_sales,
+            "total_orders": total_orders,
+            "avg_order_value": avg_order_value,
+            "sales_by_status": {row["order_status"]: {"count": row["count"], "total": float(row["total"])} for row in status_results},
+            "top_customers": [
+                {
+                    "name": f"{customer['first_name']} {customer['last_name']}",
+                    "email": customer["email"],
+                    "order_count": customer["order_count"],
+                    "total_spent": float(customer["total_spent"])
+                }
+                for customer in top_customers
+            ]
+        }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

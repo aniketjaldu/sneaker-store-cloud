@@ -15,6 +15,9 @@ load_dotenv()
 
 # JWT Configuration
 JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    print("WARNING: JWT_SECRET is not set!")
+    JWT_SECRET = "super-secret-jwt-key"
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRY_MINUTES = 15
 REFRESH_TOKEN_EXPIRY_DAYS = 7
