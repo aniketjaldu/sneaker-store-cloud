@@ -188,6 +188,24 @@ npm start
 
 The frontend will be available at http://localhost:3000 and will proxy API requests to the backend services.
 
+### CLI Admin Tool
+
+For administrative tasks, you can use the CLI admin tool:
+
+```bash
+# Navigate to CLI admin directory
+cd frontend/cli-admin
+
+# Run the CLI admin tool
+python main.py
+```
+
+The CLI admin tool provides command-line interface for:
+- User management operations
+- Inventory management
+- Order management
+- Analytics and reporting
+
 ### Troubleshooting
 
 #### Common Issues
