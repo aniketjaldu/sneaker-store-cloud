@@ -118,7 +118,11 @@ class ProductCreate(BaseModel):
     product_name: str
     description: str
     market_price: float
+<<<<<<< Updated upstream
     discount_percent: float
+=======
+    discount_percent: float = 0.0
+>>>>>>> Stashed changes
     quantity: int
 
 @app.post("/admin/products")
