@@ -801,16 +801,16 @@ async def update_admin_order_status(order_id: int, request: Request):
         conn = connect_user_db()
         
         # Get current order status
-        current_status_query = "SELECT status FROM orders WHERE order_id = %s"
+        current_status_query = "SELECT order_status FROM orders WHERE order_id = %s"
         current_result = query_db(conn, current_status_query, (order_id,))
         if not current_result:
             close_db(conn)
             raise HTTPException(status_code=404, detail="Order not found")
         
-        current_status = current_result[0]["status"]
+        current_status = current_result[0]["order_status"]
         
         # Update order status
-        update_query = "UPDATE orders SET status = %s WHERE order_id = %s"
+        update_query = "UPDATE orders SET order_status = %s WHERE order_id = %s"
         execute_db(conn, update_query, (new_status, order_id))
         
         # Get order items for stock management
@@ -1078,5 +1078,153 @@ async def create_order(user_id: int, request: Request):
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== ANALYTICS ROUTES ==========
+@app.get("/admin/analytics/users")
+async def get_user_analytics():
+    try:
+        conn = connect_user_db()
+        
+        # Get total users
+        total_users_query = "SELECT COUNT(*) as total_users FROM users"
+        total_users_result = query_db(conn, total_users_query)
+        total_users = total_users_result[0]["total_users"] if total_users_result else 0
+        
+        # Get users by role
+        role_query = """
+            SELECT role, COUNT(*) as count
+            FROM users u
+            INNER JOIN user_roles ur ON u.user_id = ur.user_id
+            GROUP BY role
+        """
+        role_results = query_db(conn, role_query)
+        
+        # Calculate active users (users with orders in last 30 days)
+        from datetime import datetime, timedelta
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        active_users_query = """
+            SELECT COUNT(DISTINCT user_id) as active_users
+            FROM orders
+            WHERE order_date >= %s
+        """
+        active_users_result = query_db(conn, active_users_query, (thirty_days_ago,))
+        active_users = active_users_result[0]["active_users"] if active_users_result else 0
+        
+        # Get new users today (approximate - using order_date as proxy)
+        today = datetime.now().date()
+        new_users_query = """
+            SELECT COUNT(*) as new_users_today
+            FROM users u
+            WHERE EXISTS (
+                SELECT 1 FROM orders o 
+                WHERE o.user_id = u.user_id 
+                AND DATE(o.order_date) = %s
+            )
+        """
+        new_users_result = query_db(conn, new_users_query, (today,))
+        new_users_today = new_users_result[0]["new_users_today"] if new_users_result else 0
+        
+        close_db(conn)
+        
+        return {
+            "total_users": total_users,
+            "active_users": active_users,
+            "new_users_today": new_users_today,
+            "users_by_role": {row["role"]: row["count"] for row in role_results}
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/analytics/sales")
+async def get_sales_analytics(
+    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
+):
+    try:
+        conn = connect_user_db()
+        
+        # Build date filter
+        date_filter = ""
+        params = []
+        if date_from and date_to:
+            date_filter = "WHERE order_date BETWEEN %s AND %s"
+            params = [date_from, date_to]
+        elif date_from:
+            date_filter = "WHERE order_date >= %s"
+            params = [date_from]
+        elif date_to:
+            date_filter = "WHERE order_date <= %s"
+            params = [date_to]
+        
+        # Get total sales
+        total_sales_query = f"""
+            SELECT 
+                SUM(total_amount) as total_sales,
+                COUNT(*) as total_orders,
+                AVG(total_amount) as avg_order_value
+            FROM orders
+            {date_filter}
+        """
+        sales_result = query_db(conn, total_sales_query, tuple(params))
+        
+        if sales_result and sales_result[0]["total_sales"]:
+            total_sales = float(sales_result[0]["total_sales"])
+            total_orders = sales_result[0]["total_orders"]
+            avg_order_value = float(sales_result[0]["avg_order_value"])
+        else:
+            total_sales = 0.0
+            total_orders = 0
+            avg_order_value = 0.0
+        
+        # Get sales by status
+        status_query = f"""
+            SELECT 
+                order_status,
+                COUNT(*) as count,
+                SUM(total_amount) as total
+            FROM orders
+            {date_filter}
+            GROUP BY order_status
+        """
+        status_results = query_db(conn, status_query, tuple(params))
+        
+        # Get top customers
+        top_customers_query = f"""
+            SELECT 
+                u.first_name,
+                u.last_name,
+                u.email,
+                COUNT(o.order_id) as order_count,
+                SUM(o.total_amount) as total_spent
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            {date_filter}
+            GROUP BY o.user_id, u.first_name, u.last_name, u.email
+            ORDER BY total_spent DESC
+            LIMIT 5
+        """
+        top_customers = query_db(conn, top_customers_query, tuple(params))
+        
+        close_db(conn)
+        
+        return {
+            "total_sales": total_sales,
+            "total_orders": total_orders,
+            "avg_order_value": avg_order_value,
+            "sales_by_status": {row["order_status"]: {"count": row["count"], "total": float(row["total"])} for row in status_results},
+            "top_customers": [
+                {
+                    "name": f"{customer['first_name']} {customer['last_name']}",
+                    "email": customer["email"],
+                    "order_count": customer["order_count"],
+                    "total_spent": float(customer["total_spent"])
+                }
+                for customer in top_customers
+            ]
+        }
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

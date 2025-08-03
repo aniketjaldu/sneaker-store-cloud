@@ -409,6 +409,42 @@ async def list_inventory(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# GET Product Statistics
+@app.get("/products/stats")
+def get_custom_inventory(
+    columns: List[str] = Query(..., description="Columns to select, e.g., product_name, market_price, brand_id"),
+    sort_by: str = Query("product_name", description="Column to sort by"),
+    sort_order: str = Query("asc", description="Sort order: asc or desc")
+):
+    allowed_columns = {"product_name", "description", "brand_id", "market_price", "discount_percent", "date_added"}
+    if not set(columns).issubset(allowed_columns):
+        raise HTTPException(status_code=400, detail="Invalid column(s) requested")
+
+    if sort_by not in allowed_columns:
+        raise HTTPException(status_code=400, detail="Invalid sort_by column")
+
+    if sort_order.lower() not in ["asc", "desc"]:
+        raise HTTPException(status_code=400, detail="Invalid sort_order value")
+
+    selected_cols = ", ".join(columns)
+
+    try:
+        conn = connect_inventory_db()
+        cursor = conn.cursor(dictionary=True)
+
+        query = f"""
+            SELECT {selected_cols}
+            FROM products
+            ORDER BY {sort_by} {sort_order.upper()}
+        """
+        cursor.execute(query)
+        results = cursor.fetchall()
+        return results
+    except mysql.connector.Error as err:
+        raise HTTPException(status_code=500, detail=f"Database error: {err}")
+    finally:
+        close_db(conn)
+
 # GET Product Details
 @app.get("/products/{product_id}")
 async def list_product_info(product_id: int):
@@ -572,41 +608,6 @@ async def validate_stock(product_id: int, quantity: int = Query(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/products/stats")
-def get_custom_inventory(
-    columns: List[str] = Query(..., description="Columns to select, e.g., product_name, market_price, brand_id"),
-    sort_by: str = Query("product_name", description="Column to sort by"),
-    sort_order: str = Query("asc", description="Sort order: asc or desc")
-):
-    allowed_columns = {"product_name", "description", "brand_id", "market_price", "discount_percent", "date_added"}
-    if not set(columns).issubset(allowed_columns):
-        raise HTTPException(status_code=400, detail="Invalid column(s) requested")
-
-    if sort_by not in allowed_columns:
-        raise HTTPException(status_code=400, detail="Invalid sort_by column")
-
-    if sort_order.lower() not in ["asc", "desc"]:
-        raise HTTPException(status_code=400, detail="Invalid sort_order value")
-
-    selected_cols = ", ".join(columns)
-
-    try:
-        conn = connect_inventory_db()
-        cursor = conn.cursor(dictionary=True)
-
-        query = f"""
-            SELECT {selected_cols}
-            FROM products
-            ORDER BY {sort_by} {sort_order.upper()}
-        """
-        cursor.execute(query)
-        results = cursor.fetchall()
-        return results
-    except mysql.connector.Error as err:
-        raise HTTPException(status_code=500, detail=f"Database error: {err}")
-    finally:
-        close_db(conn)
 
 # ========== ADMIN STOCK MANAGEMENT ROUTES ==========
 @app.post("/admin/products/{product_id}/reserve-stock")
