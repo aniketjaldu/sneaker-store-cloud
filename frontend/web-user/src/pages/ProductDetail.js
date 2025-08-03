@@ -185,7 +185,20 @@ const ProductDetail = () => {
                 >
                   -
                 </button>
-                <span className="px-4 py-2 border-x border-gray-300">{quantity}</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    setQuantity(Math.max(1, value));
+                  }}
+                  onBlur={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    setQuantity(Math.max(1, value));
+                  }}
+                  className="px-4 py-2 border-x border-gray-300 text-center w-16 focus:outline-none focus:ring-2 focus:ring-primary-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
                 <button
                   onClick={() => setQuantity(quantity + 1)}
                   className="px-3 py-2 text-gray-600 hover:text-gray-800"

@@ -247,7 +247,16 @@ def get_inventory(
         params = {k: v for k, v in params.items() if v is not None}
         
         response = requests.get("http://inventory-service:8080/products", params=params)
-        return response.json()
+        if response.status_code != 200:
+            return response.json()
+        
+        products = response.json()
+        
+        # Calculate current_price for each product
+        for product in products:
+            product["current_price"] = round(product.get("market_price", 0) * (1 - product.get("discount_percent", 0) / 100), 2)
+        
+        return products
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
@@ -291,7 +300,22 @@ def get_filter_options():
 def get_product_details(product_id: int):
     try:
         response = requests.get(f"http://inventory-service:8080/products/{product_id}")
-        return response.json()
+        if response.status_code != 200:
+            return response.json()
+        
+        product_data = response.json()
+        
+        # Calculate current_price from market_price and discount_percent
+        # The inventory service returns final_price, but frontend expects current_price
+        if "final_price" in product_data:
+            product_data["current_price"] = round(product_data["final_price"], 2)
+            # Remove final_price to avoid confusion
+            del product_data["final_price"]
+        else:
+            # Fallback calculation if final_price is not available
+            product_data["current_price"] = round(product_data.get("market_price", 0) * (1 - product_data.get("discount_percent", 0) / 100), 2)
+        
+        return product_data
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Inventory service unavailable")
 
@@ -321,7 +345,7 @@ def get_cart(current_user: dict = Depends(get_current_user)):
                             "brand_name": product_data.get("brand_name"),
                             "market_price": product_data.get("market_price"),
                             "discount_percent": product_data.get("discount_percent", 0),
-                            "current_price": product_data.get("market_price", 0) * (1 - product_data.get("discount_percent", 0) / 100)
+                            "current_price": round(product_data.get("market_price", 0) * (1 - product_data.get("discount_percent", 0) / 100), 2)
                         })
                 except requests.RequestException:
                     pass
@@ -334,10 +358,34 @@ def get_cart(current_user: dict = Depends(get_current_user)):
 def add_to_cart(product_id: int = Query(...), quantity: int = Query(1), current_user: dict = Depends(get_current_user)):
     try:
         user_id = current_user["sub"]
-        response = requests.post(f"http://user-service:8080/users/{user_id}/cart/{product_id}?quantity={quantity}")
-        return response.json()
+        
+        # First, validate stock availability
+        stock_validation = requests.post(f"http://inventory-service:8080/products/{product_id}/validate-stock?quantity={quantity}")
+        if stock_validation.status_code != 200:
+            return stock_validation.json()
+        
+        stock_data = stock_validation.json()
+        if not stock_data["available"]:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient stock. Available: {stock_data['current_stock']}, Requested: {quantity}"
+            )
+        
+        # Reserve stock in inventory
+        reserve_response = requests.post(f"http://inventory-service:8080/products/{product_id}/reserve-stock?quantity={quantity}")
+        if reserve_response.status_code != 200:
+            raise HTTPException(status_code=503, detail="Failed to reserve stock")
+        
+        # Add to cart in user service
+        cart_response = requests.post(f"http://user-service:8080/users/{user_id}/cart/{product_id}?quantity={quantity}")
+        if cart_response.status_code != 200:
+            # If adding to cart fails, release the reserved stock
+            requests.post(f"http://inventory-service:8080/products/{product_id}/release-stock?quantity={quantity}")
+            return cart_response.json()
+        
+        return cart_response.json()
     except requests.RequestException:
-        raise HTTPException(status_code=503, detail="User service unavailable")
+        raise HTTPException(status_code=503, detail="Service unavailable")
 
 
 
@@ -345,10 +393,39 @@ def add_to_cart(product_id: int = Query(...), quantity: int = Query(1), current_
 def remove_from_cart(product_id: int = Query(...), current_user: dict = Depends(get_current_user)):
     try:
         user_id = current_user["sub"]
-        response = requests.delete(f"http://user-service:8080/users/{user_id}/cart/{product_id}")
-        return response.json()
+        
+        # First, get the current cart item to know the quantity
+        cart_response = requests.get(f"http://user-service:8080/users/{user_id}/cart")
+        if cart_response.status_code != 200:
+            return cart_response.json()
+        
+        cart_items = cart_response.json()
+        item_to_remove = None
+        for item in cart_items if isinstance(cart_items, list) else [cart_items]:
+            if item.get("product_id") == product_id:
+                item_to_remove = item
+                break
+        
+        if not item_to_remove:
+            raise HTTPException(status_code=404, detail="Item not found in cart")
+        
+        quantity_to_release = item_to_remove.get("quantity", 1)
+        
+        # Remove from cart in user service
+        remove_response = requests.delete(f"http://user-service:8080/users/{user_id}/cart/{product_id}")
+        if remove_response.status_code != 200:
+            return remove_response.json()
+        
+        # Release stock back to inventory
+        try:
+            requests.post(f"http://inventory-service:8080/products/{product_id}/release-stock?quantity={quantity_to_release}")
+        except requests.RequestException:
+            # Log the error but don't fail the cart removal
+            print(f"Warning: Failed to release stock for product {product_id}")
+        
+        return remove_response.json()
     except requests.RequestException:
-        raise HTTPException(status_code=503, detail="User service unavailable")
+        raise HTTPException(status_code=503, detail="Service unavailable")
 
 # ========== ORDER ROUTES ==========
 @app.get("/orders")
@@ -376,7 +453,10 @@ def get_user_orders(current_user: dict = Depends(get_current_user)):
                                     "product_name": product_data.get("product_name"),
                                     "description": product_data.get("description"),
                                     "brand_name": product_data.get("brand_name"),
-                                    "market_price": product_data.get("market_price")
+                                    "market_price": product_data.get("market_price"),
+                                    # Use stored prices from order_items table for persistence
+                                    "current_price": item.get("unit_price", 0),
+                                    "item_total": item.get("total_price", 0)
                                 })
                         except requests.RequestException:
                             pass
@@ -409,7 +489,10 @@ def get_order_details(order_id: int, current_user: dict = Depends(get_current_us
                                 "product_name": product_data.get("product_name"),
                                 "description": product_data.get("description"),
                                 "brand_name": product_data.get("brand_name"),
-                                "market_price": product_data.get("market_price")
+                                "market_price": product_data.get("market_price"),
+                                # Use stored prices from order_items table for persistence
+                                "current_price": item.get("unit_price", 0),
+                                "item_total": item.get("total_price", 0)
                             })
                     except requests.RequestException:
                         pass
@@ -422,6 +505,32 @@ def get_order_details(order_id: int, current_user: dict = Depends(get_current_us
 def create_order(order_data: dict = {}, current_user: dict = Depends(get_current_user)):
     try:
         user_id = current_user["sub"]
+        
+        # First, get the user's cart to validate stock for all items
+        cart_response = requests.get(f"http://user-service:8080/users/{user_id}/cart")
+        if cart_response.status_code != 200:
+            return cart_response.json()
+        
+        cart_items = cart_response.json()
+        if not cart_items:
+            raise HTTPException(status_code=400, detail="Cart is empty")
+        
+        # Validate stock for all items in cart
+        for item in cart_items if isinstance(cart_items, list) else [cart_items]:
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 1)
+            
+            # Check stock availability
+            stock_validation = requests.post(f"http://inventory-service:8080/products/{product_id}/validate-stock?quantity={quantity}")
+            if stock_validation.status_code != 200:
+                return stock_validation.json()
+            
+            stock_data = stock_validation.json()
+            if not stock_data["available"]:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Insufficient stock for product {product_id}. Available: {stock_data['current_stock']}, Requested: {quantity}"
+                )
         
         # Create order in user service
         response = requests.post(f"http://user-service:8080/users/{user_id}/orders", json=order_data)
@@ -459,8 +568,8 @@ def create_order(order_data: dict = {}, current_user: dict = Depends(get_current
                 if product_response.status_code == 200:
                     product_info = product_response.json()
                     # Calculate final price with discount
-                    final_price = product_info["market_price"] * (1 - product_info.get("discount_percent", 0) / 100)
-                    item_total = final_price * item["quantity"]
+                    final_price = round(product_info["market_price"] * (1 - product_info.get("discount_percent", 0) / 100), 2)
+                    item_total = round(final_price * item["quantity"], 2)
                     total_amount += item_total
                     
                     items_with_details.append({
@@ -487,4 +596,4 @@ def create_order(order_data: dict = {}, current_user: dict = Depends(get_current
         return order_result
         
     except requests.RequestException:
-        raise HTTPException(status_code=503, detail="User service unavailable")
+        raise HTTPException(status_code=503, detail="Service unavailable")

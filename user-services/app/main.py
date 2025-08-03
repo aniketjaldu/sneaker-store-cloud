@@ -836,22 +836,72 @@ async def create_order(user_id: int):
         
         user_email = user_result[0]["email"]
         
-        # Create order with required fields
+        # Calculate total amount and get product prices
+        total_amount = 0.0
+        order_items_data = []
+        
+        for item in cart_items:
+            try:
+                # Get product details from inventory service
+                import requests
+                product_response = requests.get(f"http://inventory-service:8080/products/{item['product_id']}")
+                if product_response.status_code == 200:
+                    product_data = product_response.json()
+                    
+                    # Calculate discounted price at time of purchase
+                    market_price = product_data.get("market_price", 0)
+                    discount_percent = product_data.get("discount_percent", 0)
+                    unit_price = round(market_price * (1 - discount_percent / 100), 2)
+                    total_price = round(unit_price * item["quantity"], 2)
+                    
+                    total_amount += total_price
+                    order_items_data.append({
+                        "product_id": item["product_id"],
+                        "quantity": item["quantity"],
+                        "unit_price": unit_price,
+                        "total_price": total_price
+                    })
+                else:
+                    # Fallback if product not found
+                    unit_price = 0.0
+                    total_price = 0.0
+                    order_items_data.append({
+                        "product_id": item["product_id"],
+                        "quantity": item["quantity"],
+                        "unit_price": unit_price,
+                        "total_price": total_price
+                    })
+            except Exception as e:
+                print(f"Error getting product {item['product_id']}: {e}")
+                # Fallback
+                unit_price = 0.0
+                total_price = 0.0
+                order_items_data.append({
+                    "product_id": item["product_id"],
+                    "quantity": item["quantity"],
+                    "unit_price": unit_price,
+                    "total_price": total_price
+                })
+        
+        # Create order with calculated total amount
         order_query = "INSERT INTO orders (user_id, order_date, email, total_amount) VALUES (%s, NOW(), %s, %s)"
         cursor = conn.cursor()
-        cursor.execute(order_query, (user_id, user_email, 0.0))  # Placeholder total_amount
+        cursor.execute(order_query, (user_id, user_email, total_amount))
         order_id = cursor.lastrowid
 
-        # Add order items
-        for item in cart_items:
+        # Add order items with actual prices
+        for item_data in order_items_data:
             item_query = """
                 INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price)
                 VALUES (%s, %s, %s, %s, %s)
             """
-            # Placeholder price (e.g., 0.0), replace with actual pricing logic later
-            unit_price = 0.0
-            total_price = unit_price * item["quantity"]
-            execute_db(conn, item_query, (order_id, item["product_id"], item["quantity"], unit_price, total_price))
+            execute_db(conn, item_query, (
+                order_id, 
+                item_data["product_id"], 
+                item_data["quantity"], 
+                item_data["unit_price"], 
+                item_data["total_price"]
+            ))
 
         # Clear cart
         clear_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
@@ -860,8 +910,6 @@ async def create_order(user_id: int):
         conn.commit()
         cursor.close()
         close_db(conn)
-
-
 
         return {"message": "Order placed successfully", "order_id": order_id}
 

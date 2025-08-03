@@ -259,45 +259,57 @@ class AdminCLI:
             params["status"] = status
         
         data = self.make_request("GET", "/orders", params=params)
-        if data:
+        if data and isinstance(data, list):
             headers = ["ID", "User ID", "Status", "Created Date"]
             rows = []
             for order in data:
-                rows.append([
-                    order['order_id'],
-                    order.get('user_id', 'N/A'),
-                    order.get('status', 'N/A'),
-                    order.get('created_at', 'N/A')
-                ])
+                if isinstance(order, dict):
+                    rows.append([
+                        order.get('order_id', 'N/A'),
+                        order.get('user_id', 'N/A'),
+                        order.get('order_status', 'N/A'),
+                        order.get('order_date', 'N/A')
+                    ])
             
-            title = f"📋 Orders ({len(data)} found)"
+            title = f"📋 Orders ({len(rows)} found)"
             if user_id:
                 title += f" - User ID: {user_id}"
             if status:
                 title += f" - Status: {status}"
             
             print(format_table(headers, rows, title))
+        elif data and isinstance(data, dict) and 'detail' in data:
+            print(f"❌ Error: {data['detail']}")
         else:
             print("❌ No orders found or error occurred.")
     
     def get_order(self, order_id: int):
         data = self.make_request("GET", f"/orders/{order_id}")
-        if data:
+        if data and isinstance(data, dict) and 'order_id' in data:
             print(f"\n📋 Order Details:")
             print("-" * 40)
-            print(f"ID: {data['order_id']}")
+            print(f"ID: {data.get('order_id', 'N/A')}")
             print(f"User ID: {data.get('user_id', 'N/A')}")
-            print(f"Status: {data.get('status', 'N/A')}")
-            print(f"Created: {data.get('created_at', 'N/A')}")
-            if 'items' in data:
+            print(f"Status: {data.get('order_status', 'N/A')}")
+            print(f"Created: {data.get('order_date', 'N/A')}")
+            if 'items' in data and isinstance(data['items'], list):
                 print(f"Items ({len(data['items'])}):")
                 for item in data['items']:
-                    print(f"  - {item.get('product_name', 'Unknown')} x{item.get('quantity', 1)}")
+                    if isinstance(item, dict):
+                        print(f"  - {item.get('product_name', 'Unknown')} x{item.get('quantity', 1)}")
+        elif data and isinstance(data, dict) and 'detail' in data:
+            print(f"❌ Error: {data['detail']}")
+        else:
+            print("❌ Order not found or error occurred.")
     
     def update_order_status(self, order_id: int, status: str):
         data = self.make_request("PUT", f"/orders/{order_id}/status?status={status}")
-        if data:
-            print(f"✅ Order status updated to {status}")
+        if data and isinstance(data, dict) and 'message' in data:
+            print(f"✅ {data['message']}")
+        elif data and isinstance(data, dict) and 'detail' in data:
+            print(f"❌ Error: {data['detail']}")
+        else:
+            print("❌ Failed to update order status.")
     
     def show_analytics(self):
         print("\n📊 Analytics Dashboard")

@@ -62,11 +62,11 @@ const Cart = () => {
   };
 
   const calculateTax = () => {
-    return calculateSubtotal() * 0.08; // 8% tax
+    return Math.round(calculateSubtotal() * 0.08 * 100) / 100; // 8% tax, rounded to 2 decimal places
   };
 
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateTax();
+    return Math.round((calculateSubtotal() + calculateTax()) * 100) / 100;
   };
 
   const handleCheckout = async () => {
@@ -166,9 +166,21 @@ const Cart = () => {
                           >
                             -
                           </button>
-                          <span className="px-4 py-1 border-x border-gray-300">
-                            {item.quantity}
-                          </span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const value = parseInt(e.target.value) || 1;
+                              updateQuantity(item.product_id, Math.max(1, value));
+                            }}
+                            onBlur={(e) => {
+                              const value = parseInt(e.target.value) || 1;
+                              updateQuantity(item.product_id, Math.max(1, value));
+                            }}
+                            disabled={updating}
+                            className="px-4 py-1 border-x border-gray-300 text-center w-16 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
                           <button
                             onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
                             disabled={updating}
