@@ -470,7 +470,6 @@ async def list_product_info(product_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# GET Custom Product Search
 # ================ STOCK MANAGEMENT ROUTES ===============
 
 @app.get("/products/{product_id}/stock")
