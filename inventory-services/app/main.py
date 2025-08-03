@@ -160,11 +160,6 @@ class ProductCreate(BaseModel):
     description: Optional[str] = None
     market_price: float
     discount_percent: float = 0.0
-<<<<<<< Updated upstream
-    discount_percent: float
-=======
-    discount_percent: float = 0.0
->>>>>>> Stashed changes
     quantity: int
 
 @app.post("/admin/products")
@@ -175,14 +170,15 @@ async def create_product(product: ProductCreate):
 
         query = """
             INSERT INTO products (brand_id, product_name, description, market_price, discount_percent, quantity)
-            VALUES (%s, %s, %s, %s, %s, 0)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """
         values = (
             product.brand_id,
             product.product_name,
             product.description,
             product.market_price,
-            product.discount_percent
+            product.discount_percent,
+            product.quantity
         )
 
         cursor.execute(query, values)
