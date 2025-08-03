@@ -116,7 +116,7 @@ const Home = () => {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {featuredProducts.slice(0, 6).map((product) => (
-              <div key={product.id} className="bg-white rounded-lg shadow-md overflow-hidden product-card">
+              <div key={product.product_id} className="bg-white rounded-lg shadow-md overflow-hidden product-card">
                 <div className="aspect-w-1 aspect-h-1 bg-gray-200">
                   <div className="w-full h-48 bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
                     <span className="text-gray-500 text-lg font-medium">
@@ -143,7 +143,7 @@ const Home = () => {
                       )}
                     </div>
                     <Link 
-                      to={`/products/${product.id}`}
+                      to={`/products/${product.product_id}`}
                       className="bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
                     >
                       View Details

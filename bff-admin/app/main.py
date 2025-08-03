@@ -20,7 +20,6 @@ class UserCreateRequest(BaseModel):
 
 class ProductCreateRequest(BaseModel):
     brand_id: int
-    product_code: str
     product_name: str
     description: Optional[str] = None
     market_price: float
@@ -287,7 +286,6 @@ def get_all_orders(
                                 # Merge product details into order item
                                 item.update({
                                     "product_name": product_data.get("product_name"),
-                                    "product_code": product_data.get("product_code"),
                                     "description": product_data.get("description"),
                                     "brand_name": product_data.get("brand_name"),
                                     "market_price": product_data.get("market_price")
@@ -320,7 +318,6 @@ def get_order_details(order_id: int, current_admin: dict = Depends(get_current_a
                             # Merge product details into order item
                             item.update({
                                 "product_name": product_data.get("product_name"),
-                                "product_code": product_data.get("product_code"),
                                 "description": product_data.get("description"),
                                 "brand_name": product_data.get("brand_name"),
                                 "market_price": product_data.get("market_price")

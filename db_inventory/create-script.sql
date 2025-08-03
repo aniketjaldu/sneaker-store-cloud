@@ -45,7 +45,7 @@ INSERT INTO brands (brand_id, brand_name) VALUES
 (1, 'Nike'),
 (2, 'Adidas'),
 (3, 'Jordan'),
-(4, 'New Balance'),
+(4, 'New Balance');
 
 INSERT INTO products (product_id, brand_id, product_name, description, market_price, discount_percent, quantity, date_added) VALUES
 -- Nike

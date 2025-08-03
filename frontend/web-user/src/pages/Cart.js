@@ -152,7 +152,7 @@ const Cart = () => {
                       {item.product_name}
                     </h3>
                     <p className="text-gray-600 text-sm mb-2">
-                      {item.brand_name} • {item.product_code}
+                      {item.brand_name}
                     </p>
                     
                     <div className="flex items-center justify-between">

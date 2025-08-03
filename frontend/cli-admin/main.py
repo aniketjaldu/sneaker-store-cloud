@@ -214,17 +214,15 @@ class AdminCLI:
             print("-" * 40)
             print(f"ID: {data['product_id']}")
             print(f"Name: {data['product_name']}")
-            print(f"Code: {data['product_code']}")
             print(f"Brand: {data.get('brand_name', 'N/A')}")
             print(f"Price: ${data.get('market_price', 0):.2f}")
             print(f"Discount: {data.get('discount_percent', 0)}%")
             print(f"Description: {data.get('description', 'No description')}")
     
-    def create_product(self, brand_id: int, product_code: str, product_name: str, 
+    def create_product(self, brand_id: int, product_name: str, 
                       market_price: float, discount_percent: float = 0, description: str = ""):
         data = self.make_request("POST", "/inventory", json={
             "brand_id": brand_id,
-            "product_code": product_code,
             "product_name": product_name,
             "description": description,
             "market_price": market_price,
@@ -556,13 +554,12 @@ def product_management_loop():
             cli.list_products()
             print("\n" + "=" * 40)
             brand_id = input("Brand ID: ").strip()
-            product_code = input("Product Code: ").strip()
             product_name = input("Product Name: ").strip()
             market_price = input("Market Price: ").strip()
             discount_percent = input("Discount % [0]: ").strip() or "0"
             description = input("Description [Enter for none]: ").strip() or ""
             try:
-                cli.create_product(int(brand_id), product_code, product_name, 
+                cli.create_product(int(brand_id), product_name, 
                                  float(market_price), float(discount_percent), description)
             except ValueError:
                 print("❌ Invalid numeric values")

@@ -317,7 +317,6 @@ def get_cart(current_user: dict = Depends(get_current_user)):
                         # Merge product details into cart item
                         item.update({
                             "product_name": product_data.get("product_name"),
-                            "product_code": product_data.get("product_code"),
                             "description": product_data.get("description"),
                             "brand_name": product_data.get("brand_name"),
                             "market_price": product_data.get("market_price"),
@@ -339,6 +338,8 @@ def add_to_cart(product_id: int = Query(...), quantity: int = Query(1), current_
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")
+
+
 
 @app.delete("/cart/remove")
 def remove_from_cart(product_id: int = Query(...), current_user: dict = Depends(get_current_user)):
@@ -373,7 +374,6 @@ def get_user_orders(current_user: dict = Depends(get_current_user)):
                                 # Merge product details into order item
                                 item.update({
                                     "product_name": product_data.get("product_name"),
-                                    "product_code": product_data.get("product_code"),
                                     "description": product_data.get("description"),
                                     "brand_name": product_data.get("brand_name"),
                                     "market_price": product_data.get("market_price")
@@ -407,7 +407,6 @@ def get_order_details(order_id: int, current_user: dict = Depends(get_current_us
                             # Merge product details into order item
                             item.update({
                                 "product_name": product_data.get("product_name"),
-                                "product_code": product_data.get("product_code"),
                                 "description": product_data.get("description"),
                                 "brand_name": product_data.get("brand_name"),
                                 "market_price": product_data.get("market_price")
