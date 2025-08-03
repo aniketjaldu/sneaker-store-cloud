@@ -632,8 +632,139 @@ async def update_user_role(user_id: int, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-  
+
+# ========== ADMIN ORDER ROUTES ==========
+@app.get("/admin/orders")
+async def get_all_orders():
+    try:
+        conn = connect_user_db()
+        
+        # Get all orders with user information
+        query = """
+            SELECT o.*, u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            ORDER BY o.order_date DESC
+        """
+        orders = query_db(conn, query)
+        
+        # For each order, get order items
+        for order in orders:
+            items_query = """
+                SELECT product_id, quantity, unit_price, total_price
+                FROM order_items
+                WHERE order_id = %s
+            """
+            items = query_db(conn, items_query, (order["order_id"],))
+            order["items"] = items
+        
+        close_db(conn)
+        return orders
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/orders/{order_id}")
+async def get_admin_order_details(order_id: int):
+    try:
+        conn = connect_user_db()
+        
+        # Get the order with user information
+        order_query = """
+            SELECT o.*, u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            WHERE o.order_id = %s
+        """
+        order_result = query_db(conn, order_query, (order_id,))
+        if not order_result:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        order = order_result[0]
+        
+        # Get order items
+        items_query = """
+            SELECT product_id, quantity, unit_price, total_price
+            FROM order_items
+            WHERE order_id = %s
+        """
+        items = query_db(conn, items_query, (order_id,))
+        order["items"] = items
+        
+        close_db(conn)
+        return order
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/admin/orders/{order_id}/status")
+async def update_admin_order_status(order_id: int, request: Request):
+    try:
+        data = await request.json()
+        new_status = data.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        conn = connect_user_db()
+        
+        # Get current order status and items
+        order_query = """
+            SELECT o.order_status, oi.product_id, oi.quantity
+            FROM orders o
+            JOIN order_items oi ON o.order_id = oi.order_id
+            WHERE o.order_id = %s
+        """
+        order_data = query_db(conn, order_query, (order_id,))
+        
+        if not order_data:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        current_status = order_data[0]["order_status"]
+        
+        # Update order status
+        update_query = "UPDATE orders SET order_status = %s WHERE order_id = %s"
+        execute_db(conn, update_query, (new_status, order_id))
+        
+        # Handle stock management based on status transition
+        import requests
+        
+        for item in order_data:
+            product_id = item["product_id"]
+            quantity = item["quantity"]
+            
+            try:
+                # Stock management logic based on status transitions
+                if current_status == "pending" and new_status in ["cancelled", "refunded"]:
+                    # Order cancelled/refunded - release stock back to inventory
+                    release_response = requests.post(f"http://inventory-service:8080/products/{product_id}/release-stock?quantity={quantity}")
+                    if release_response.status_code != 200:
+                        print(f"Warning: Failed to release stock for product {product_id}")
+                
+                elif current_status in ["cancelled", "refunded"] and new_status == "pending":
+                    # Order reactivated - reserve stock again
+                    reserve_response = requests.post(f"http://inventory-service:8080/products/{product_id}/reserve-stock?quantity={quantity}")
+                    if reserve_response.status_code != 200:
+                        print(f"Warning: Failed to reserve stock for product {product_id}")
+                
+                elif current_status == "pending" and new_status in ["processing", "shipped", "delivered"]:
+                    # Order confirmed - ensure stock is reserved (should already be done during order creation)
+                    # This is a safety check in case stock wasn't properly reserved during order creation
+                    validate_response = requests.post(f"http://inventory-service:8080/products/{product_id}/validate-stock?quantity={quantity}")
+                    if validate_response.status_code != 200:
+                        print(f"Warning: Stock validation failed for product {product_id}")
+                
+            except requests.RequestException as e:
+                print(f"Warning: Failed to manage stock for product {product_id}: {e}")
+        
+        close_db(conn)
+        return {"message": f"Order status updated to '{new_status}' successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ========== SHOPPING CART ==========
 # GET /users/{user_id}/cart

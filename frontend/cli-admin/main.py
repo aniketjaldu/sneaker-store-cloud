@@ -259,57 +259,61 @@ class AdminCLI:
             params["status"] = status
         
         data = self.make_request("GET", "/orders", params=params)
-        if data and isinstance(data, list):
-            headers = ["ID", "User ID", "Status", "Created Date"]
+        if data:
+            headers = ["ID", "Customer", "Status", "Created Date"]
             rows = []
             for order in data:
+                # Handle both string and dictionary responses
                 if isinstance(order, dict):
+                    # Get user name from the order data
+                    first_name = order.get('first_name', 'Unknown')
+                    last_name = order.get('last_name', '')
+                    customer_name = f"{first_name} {last_name}".strip()
+                    
                     rows.append([
                         order.get('order_id', 'N/A'),
-                        order.get('user_id', 'N/A'),
+                        customer_name,
                         order.get('order_status', 'N/A'),
                         order.get('order_date', 'N/A')
                     ])
+                else:
+                    # If order is a string, skip it
+                    continue
             
-            title = f"📋 Orders ({len(rows)} found)"
+            title = f"📋 Orders ({len(data)} found)"
             if user_id:
                 title += f" - User ID: {user_id}"
             if status:
                 title += f" - Status: {status}"
             
             print(format_table(headers, rows, title))
-        elif data and isinstance(data, dict) and 'detail' in data:
-            print(f"❌ Error: {data['detail']}")
         else:
             print("❌ No orders found or error occurred.")
     
     def get_order(self, order_id: int):
         data = self.make_request("GET", f"/orders/{order_id}")
-        if data and isinstance(data, dict) and 'order_id' in data:
+        if data:
             print(f"\n📋 Order Details:")
             print("-" * 40)
             print(f"ID: {data.get('order_id', 'N/A')}")
-            print(f"User ID: {data.get('user_id', 'N/A')}")
+            
+            # Get customer name
+            first_name = data.get('first_name', 'Unknown')
+            last_name = data.get('last_name', '')
+            customer_name = f"{first_name} {last_name}".strip()
+            print(f"Customer: {customer_name}")
+            print(f"Email: {data.get('email', 'N/A')}")
             print(f"Status: {data.get('order_status', 'N/A')}")
             print(f"Created: {data.get('order_date', 'N/A')}")
-            if 'items' in data and isinstance(data['items'], list):
+            if 'items' in data:
                 print(f"Items ({len(data['items'])}):")
                 for item in data['items']:
-                    if isinstance(item, dict):
-                        print(f"  - {item.get('product_name', 'Unknown')} x{item.get('quantity', 1)}")
-        elif data and isinstance(data, dict) and 'detail' in data:
-            print(f"❌ Error: {data['detail']}")
-        else:
-            print("❌ Order not found or error occurred.")
+                    print(f"  - {item.get('product_name', 'Unknown')} x{item.get('quantity', 1)}")
     
     def update_order_status(self, order_id: int, status: str):
         data = self.make_request("PUT", f"/orders/{order_id}/status?status={status}")
-        if data and isinstance(data, dict) and 'message' in data:
-            print(f"✅ {data['message']}")
-        elif data and isinstance(data, dict) and 'detail' in data:
-            print(f"❌ Error: {data['detail']}")
-        else:
-            print("❌ Failed to update order status.")
+        if data:
+            print(f"✅ Order status updated to {status}")
     
     def show_analytics(self):
         print("\n📊 Analytics Dashboard")
@@ -633,11 +637,34 @@ def order_management_loop():
             cli.list_orders()
             print("\n" + "=" * 40)
             order_id = input("Order ID: ").strip()
-            status = input("New Status: ").strip()
-            try:
-                cli.update_order_status(int(order_id), status)
-            except ValueError:
-                print("❌ Invalid order ID")
+            
+            # Show available status options
+            print("\n📋 Available Status Options:")
+            print("1. pending")
+            print("2. processing")
+            print("3. shipped")
+            print("4. delivered")
+            print("5. cancelled")
+            print("6. refunded")
+            
+            status_choice = input("\nSelect status (1-6): ").strip()
+            status_map = {
+                "1": "pending",
+                "2": "processing", 
+                "3": "shipped",
+                "4": "delivered",
+                "5": "cancelled",
+                "6": "refunded"
+            }
+            
+            status = status_map.get(status_choice)
+            if not status:
+                print("❌ Invalid status choice")
+            else:
+                try:
+                    cli.update_order_status(int(order_id), status)
+                except ValueError:
+                    print("❌ Invalid order ID")
         else:
             print("❌ Invalid choice. Please try again.")
         

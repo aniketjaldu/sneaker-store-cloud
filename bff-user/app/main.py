@@ -515,7 +515,7 @@ def create_order(order_data: dict = {}, current_user: dict = Depends(get_current
         if not cart_items:
             raise HTTPException(status_code=400, detail="Cart is empty")
         
-        # Validate stock for all items in cart
+        # Validate and reserve stock for all items in cart
         for item in cart_items if isinstance(cart_items, list) else [cart_items]:
             product_id = item.get("product_id")
             quantity = item.get("quantity", 1)
@@ -530,6 +530,14 @@ def create_order(order_data: dict = {}, current_user: dict = Depends(get_current
                 raise HTTPException(
                     status_code=400, 
                     detail=f"Insufficient stock for product {product_id}. Available: {stock_data['current_stock']}, Requested: {quantity}"
+                )
+            
+            # Reserve stock for this item
+            reserve_response = requests.post(f"http://inventory-service:8080/products/{product_id}/reserve-stock?quantity={quantity}")
+            if reserve_response.status_code != 200:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to reserve stock for product {product_id}"
                 )
         
         # Create order in user service
