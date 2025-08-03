@@ -5,7 +5,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Production builds
+# Build outputs
 build/
 dist/
 
@@ -91,7 +91,7 @@ temp/
 # Docker
 .dockerignore
 
-# Local development
+# Environment files
 .env.local
 .env.development.local
 .env.test.local

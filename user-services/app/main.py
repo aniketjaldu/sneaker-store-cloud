@@ -15,8 +15,8 @@ app = fastapi.FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -727,10 +727,6 @@ async def update_admin_order_status(order_id: int, request: Request):
         # Get order items for stock management
         items_query = "SELECT product_id, quantity FROM order_items WHERE order_id = %s"
         order_items = query_db(conn, items_query, (order_id,))
-        
-        # Note: Stock management should be handled by the BFF layer
-        # The BFF will coordinate with inventory service for stock operations
-        # This service should only handle order status updates
         
         close_db(conn)
         return {"message": f"Order status updated to '{new_status}' successfully"}
