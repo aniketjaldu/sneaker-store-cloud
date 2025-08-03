@@ -11,6 +11,7 @@ import Products from './pages/Products';
 import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
 import Orders from './pages/Orders';
+import OrderDetail from './pages/OrderDetail';
 import Profile from './pages/Profile';
 import './App.css';
 
@@ -44,6 +45,11 @@ function AppContent() {
             <Route path="/orders" element={
               <ProtectedRoute>
                 <Orders />
+              </ProtectedRoute>
+            } />
+            <Route path="/orders/:id" element={
+              <ProtectedRoute>
+                <OrderDetail />
               </ProtectedRoute>
             } />
             <Route path="/profile" element={

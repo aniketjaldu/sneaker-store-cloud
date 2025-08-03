@@ -214,17 +214,15 @@ class AdminCLI:
             print("-" * 40)
             print(f"ID: {data['product_id']}")
             print(f"Name: {data['product_name']}")
-            print(f"Code: {data['product_code']}")
             print(f"Brand: {data.get('brand_name', 'N/A')}")
             print(f"Price: ${data.get('market_price', 0):.2f}")
             print(f"Discount: {data.get('discount_percent', 0)}%")
             print(f"Description: {data.get('description', 'No description')}")
     
-    def create_product(self, brand_id: int, product_code: str, product_name: str, 
+    def create_product(self, brand_id: int, product_name: str, 
                       market_price: float, discount_percent: float = 0, description: str = ""):
         data = self.make_request("POST", "/inventory", json={
             "brand_id": brand_id,
-            "product_code": product_code,
             "product_name": product_name,
             "description": description,
             "market_price": market_price,
@@ -262,15 +260,25 @@ class AdminCLI:
         
         data = self.make_request("GET", "/orders", params=params)
         if data:
-            headers = ["ID", "User ID", "Status", "Created Date"]
+            headers = ["ID", "Customer", "Status", "Created Date"]
             rows = []
             for order in data:
-                rows.append([
-                    order['order_id'],
-                    order.get('user_id', 'N/A'),
-                    order.get('status', 'N/A'),
-                    order.get('created_at', 'N/A')
-                ])
+                # Handle both string and dictionary responses
+                if isinstance(order, dict):
+                    # Get user name from the order data
+                    first_name = order.get('first_name', 'Unknown')
+                    last_name = order.get('last_name', '')
+                    customer_name = f"{first_name} {last_name}".strip()
+                    
+                    rows.append([
+                        order.get('order_id', 'N/A'),
+                        customer_name,
+                        order.get('order_status', 'N/A'),
+                        order.get('order_date', 'N/A')
+                    ])
+                else:
+                    # If order is a string, skip it
+                    continue
             
             title = f"📋 Orders ({len(data)} found)"
             if user_id:
@@ -287,10 +295,16 @@ class AdminCLI:
         if data:
             print(f"\n📋 Order Details:")
             print("-" * 40)
-            print(f"ID: {data['order_id']}")
-            print(f"User ID: {data.get('user_id', 'N/A')}")
-            print(f"Status: {data.get('status', 'N/A')}")
-            print(f"Created: {data.get('created_at', 'N/A')}")
+            print(f"ID: {data.get('order_id', 'N/A')}")
+            
+            # Get customer name
+            first_name = data.get('first_name', 'Unknown')
+            last_name = data.get('last_name', '')
+            customer_name = f"{first_name} {last_name}".strip()
+            print(f"Customer: {customer_name}")
+            print(f"Email: {data.get('email', 'N/A')}")
+            print(f"Status: {data.get('order_status', 'N/A')}")
+            print(f"Created: {data.get('order_date', 'N/A')}")
             if 'items' in data:
                 print(f"Items ({len(data['items'])}):")
                 for item in data['items']:
@@ -556,13 +570,12 @@ def product_management_loop():
             cli.list_products()
             print("\n" + "=" * 40)
             brand_id = input("Brand ID: ").strip()
-            product_code = input("Product Code: ").strip()
             product_name = input("Product Name: ").strip()
             market_price = input("Market Price: ").strip()
             discount_percent = input("Discount % [0]: ").strip() or "0"
             description = input("Description [Enter for none]: ").strip() or ""
             try:
-                cli.create_product(int(brand_id), product_code, product_name, 
+                cli.create_product(int(brand_id), product_name, 
                                  float(market_price), float(discount_percent), description)
             except ValueError:
                 print("❌ Invalid numeric values")
@@ -624,11 +637,34 @@ def order_management_loop():
             cli.list_orders()
             print("\n" + "=" * 40)
             order_id = input("Order ID: ").strip()
-            status = input("New Status: ").strip()
-            try:
-                cli.update_order_status(int(order_id), status)
-            except ValueError:
-                print("❌ Invalid order ID")
+            
+            # Show available status options
+            print("\n📋 Available Status Options:")
+            print("1. pending")
+            print("2. processing")
+            print("3. shipped")
+            print("4. delivered")
+            print("5. cancelled")
+            print("6. refunded")
+            
+            status_choice = input("\nSelect status (1-6): ").strip()
+            status_map = {
+                "1": "pending",
+                "2": "processing", 
+                "3": "shipped",
+                "4": "delivered",
+                "5": "cancelled",
+                "6": "refunded"
+            }
+            
+            status = status_map.get(status_choice)
+            if not status:
+                print("❌ Invalid status choice")
+            else:
+                try:
+                    cli.update_order_status(int(order_id), status)
+                except ValueError:
+                    print("❌ Invalid order ID")
         else:
             print("❌ Invalid choice. Please try again.")
         

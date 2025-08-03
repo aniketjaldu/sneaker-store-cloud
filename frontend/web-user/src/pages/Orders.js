@@ -52,10 +52,11 @@ const Orders = () => {
   };
 
   const calculateOrderTotal = (items) => {
-    return items.reduce((total, item) => {
-      const price = item.current_price || item.market_price || 0;
-      return total + (price * item.quantity);
-    }, 0);
+    return Math.round(items.reduce((total, item) => {
+      // Use stored item_total if available, otherwise calculate from current_price
+      const itemTotal = item.item_total || (item.current_price || item.market_price || 0) * item.quantity;
+      return total + itemTotal;
+    }, 0) * 100) / 100;
   };
 
   if (loading) {
@@ -102,22 +103,22 @@ const Orders = () => {
         /* Orders List */
         <div className="space-y-6">
           {orders.map((order) => (
-            <div key={order.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div key={order.order_id} className="bg-white rounded-lg shadow-md overflow-hidden">
               {/* Order Header */}
               <div className="px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">
-                      Order #{order.id}
+                      Order #{order.order_id}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Placed on {new Date(order.created_at || Date.now()).toLocaleDateString()}
+                      Placed on {new Date(order.order_date || Date.now()).toLocaleDateString()}
                     </p>
                   </div>
                   <div className="flex items-center space-x-4">
-                    {getOrderStatus(order.status || 'pending')}
+                    {getOrderStatus(order.order_status || 'pending')}
                     <Link
-                      to={`/orders/${order.id}`}
+                      to={`/orders/${order.order_id}`}
                       className="text-primary-600 hover:text-primary-700 flex items-center space-x-1"
                     >
                       <FaEye />
@@ -152,10 +153,10 @@ const Orders = () => {
                       {/* Price */}
                       <div className="text-right">
                         <p className="font-medium text-gray-900">
-                          ${(item.current_price || item.market_price || 0) * item.quantity}
+                          ${(item.item_total || (item.current_price || item.market_price || 0) * item.quantity).toFixed(2)}
                         </p>
                         <p className="text-sm text-gray-500">
-                          ${item.current_price || item.market_price} each
+                          ${(item.current_price || item.market_price).toFixed(2)} each
                         </p>
                       </div>
                     </div>

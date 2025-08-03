@@ -22,7 +22,48 @@ def health_check():
     return {"message": "Inventory FastAPI service is operational."}
 
 
-# ================== ADMIN ROUTES ==================
+# ================ ANALYTICS ROUTES ===============
+
+@app.get("/admin/analytics/inventory")
+def get_inventory_analytics():
+    try:
+        conn = connect_inventory_db()
+        
+        # Get total products
+        total_products_query = "SELECT COUNT(*) as total FROM products"
+        total_products = query_db(conn, total_products_query)[0]["total"]
+        
+        # Get total brands
+        total_brands_query = "SELECT COUNT(*) as total FROM brands"
+        total_brands = query_db(conn, total_brands_query)[0]["total"]
+        
+        # Get discounted products
+        discounted_products_query = "SELECT COUNT(*) as total FROM products WHERE discount_percent > 0"
+        discounted_products = query_db(conn, discounted_products_query)[0]["total"]
+        
+        # Get average price
+        avg_price_query = "SELECT AVG(market_price) as avg_price FROM products"
+        avg_price_result = query_db(conn, avg_price_query)[0]
+        avg_price = avg_price_result["avg_price"] if avg_price_result["avg_price"] else 0
+        
+        # Get total inventory value
+        total_value_query = "SELECT SUM(market_price * quantity) as total_value FROM products"
+        total_value_result = query_db(conn, total_value_query)[0]
+        total_value = total_value_result["total_value"] if total_value_result["total_value"] else 0
+        
+        close_db(conn)
+        
+        return {
+            "total_products": total_products,
+            "total_brands": total_brands,
+            "discounted_products": discounted_products,
+            "average_price": round(avg_price, 2),
+            "total_inventory_value": round(total_value, 2)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ================ ADMIN ROUTES ==================
 
 # ============= Product Management Routes =============
 
@@ -42,35 +83,36 @@ async def get_all_inventory(
     try:
         conn = connect_inventory_db()
         query = """
-            SELECT p.* from products p
+            SELECT p.*, b.brand_name from products p
             INNER JOIN brands b ON p.brand_id = b.brand_id
             """
         filters = []
         params = []
 
         if brand:
-            filters.append("brand_name = %s")
+            filters.append("b.brand_name = %s")
             params.append(brand)
         if min_price is not None:
-            filters.append("market_price >= %s")
+            filters.append("p.market_price >= %s")
             params.append(min_price)
         if max_price is not None:
-            filters.append("market_price <= %s")
+            filters.append("p.market_price <= %s")
             params.append(max_price)
         if discount_only:
-            filters.append("discount_percent > 0")
+            filters.append("p.discount_percent > 0")
         if search:
-            filters.append("(product_name LIKE %s OR description LIKE %s)")
+            filters.append("(p.product_name LIKE %s OR p.description LIKE %s)")
             params.extend([f"%{search}%", f"%{search}%"])
 
         if filters:
             query += " WHERE " + " AND ".join(filters)
 
         sort_columns = {
-            "name": "product_name",
-            "price": "market_price",
-            "brand": "brand_id",
-            "discount": "discount_percent"
+            "name": "p.product_name",
+            "price": "p.market_price",
+            "brand": "b.brand_name",
+            "discount": "p.discount_percent",
+            "date_added": "p.date_added"
         }
 
         if sort_by in sort_columns:
@@ -95,7 +137,7 @@ async def get_product_details(product_id: int):
             SELECT p.product_id, p.product_name, p.description, b.brand_name,
                    p.market_price, p.discount_percent,
                    ROUND(p.market_price * (1 - p.discount_percent / 100), 2) AS final_price,
-                   p.quantity
+                   p.quantity, p.date_added
             FROM products p
             JOIN brands b ON p.brand_id = b.brand_id
             WHERE p.product_id = %s
@@ -106,7 +148,7 @@ async def get_product_details(product_id: int):
         if not result:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        return result
+        return result[0]
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -116,10 +158,9 @@ async def get_product_details(product_id: int):
 class ProductCreate(BaseModel):
     brand_id: int
     product_name: str
-    description: str
+    description: Optional[str] = None
     market_price: float
-    discount_percent: float
-    quantity: int
+    discount_percent: float = 0.0
 
 @app.post("/admin/products")
 async def create_product(product: ProductCreate):
@@ -129,15 +170,14 @@ async def create_product(product: ProductCreate):
 
         query = """
             INSERT INTO products (brand_id, product_name, description, market_price, discount_percent, quantity)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, 0)
         """
         values = (
             product.brand_id,
             product.product_name,
             product.description,
             product.market_price,
-            product.discount_percent,
-            product.quantity
+            product.discount_percent
         )
 
         cursor.execute(query, values)
@@ -154,12 +194,12 @@ async def create_product(product: ProductCreate):
 
 # PUT Update Product
 class ProductUpdate(BaseModel):
-    brand_id: Optional[int]
-    product_name: Optional[str]
-    description: Optional[str]
-    market_price: Optional[float]
-    discount_percent: Optional[float]
-    quantity: Optional[int]
+    brand_id: Optional[int] = None
+    product_name: Optional[str] = None
+    description: Optional[str] = None
+    market_price: Optional[float] = None
+    discount_percent: Optional[float] = None
+    quantity: Optional[int] = None
 
 @app.put("/admin/products/{product_id}")
 async def update_product(product_id: int, product: ProductUpdate = Body(...)):
@@ -172,8 +212,9 @@ async def update_product(product_id: int, product: ProductUpdate = Body(...)):
         values = []
 
         for field, value in product.dict(exclude_unset=True).items():
-            fields.append(f"{field} = %s")
-            values.append(value)
+            if value is not None:
+                fields.append(f"{field} = %s")
+                values.append(value)
 
         if not fields:
             raise HTTPException(status_code=400, detail="No fields provided for update.")
@@ -193,7 +234,7 @@ async def update_product(product_id: int, product: ProductUpdate = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # DELETE product
-@app.delete("/admin/products/delete/{product_id}")
+@app.delete("/admin/products/{product_id}")
 async def delete_product(product_id: int):
     try:
         conn = connect_inventory_db()
@@ -210,7 +251,7 @@ async def delete_product(product_id: int):
         conn.commit()
         close_db(conn)
 
-        return JSONResponse(status_code=200, content={"message": "Product deleted successfully"})
+        return {"message": "Product deleted successfully"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -324,35 +365,36 @@ async def list_inventory(
     try:
         conn = connect_inventory_db()
         query = """
-            SELECT p.* from products p
+            SELECT p.*, b.brand_name from products p
             INNER JOIN brands b ON p.brand_id = b.brand_id
             """
         filters = []
         params = []
 
         if brand:
-            filters.append("brand_name = %s")
+            filters.append("b.brand_name = %s")
             params.append(brand)
         if min_price is not None:
-            filters.append("market_price >= %s")
+            filters.append("p.market_price >= %s")
             params.append(min_price)
         if max_price is not None:
-            filters.append("market_price <= %s")
+            filters.append("p.market_price <= %s")
             params.append(max_price)
         if discount_only:
-            filters.append("discount_percent > 0")
+            filters.append("p.discount_percent > 0")
         if search:
-            filters.append("(product_name LIKE %s OR description LIKE %s)")
+            filters.append("(p.product_name LIKE %s OR p.description LIKE %s)")
             params.extend([f"%{search}%", f"%{search}%"])
 
         if filters:
             query += " WHERE " + " AND ".join(filters)
 
         sort_columns = {
-            "name": "product_name",
-            "price": "market_price",
-            "brand": "brand_id",
-            "discount": "discount_percent"
+            "name": "p.product_name",
+            "price": "p.market_price",
+            "brand": "b.brand_name",
+            "discount": "p.discount_percent",
+            "date_added": "p.date_added"
         }
 
         if sort_by in sort_columns:
@@ -377,7 +419,7 @@ async def list_product_info(product_id: int):
             SELECT p.product_id, p.product_name, p.description, b.brand_name,
                    p.market_price, p.discount_percent,
                    ROUND(p.market_price * (1 - p.discount_percent / 100), 2) AS final_price,
-                   p.quantity
+                   p.quantity, p.date_added
             FROM products p
             JOIN brands b ON p.brand_id = b.brand_id
             WHERE p.product_id = %s
@@ -388,13 +430,151 @@ async def list_product_info(product_id: int):
         if not result:
             raise HTTPException(status_code=404, detail="Product not found")
 
-        return result
+        return result[0]
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 # GET Custom Product Search
-@app.get("/inventory/stats")
+# ================ STOCK MANAGEMENT ROUTES ===============
+
+@app.get("/products/{product_id}/stock")
+async def get_product_stock(product_id: int):
+    try:
+        conn = connect_inventory_db()
+        
+        # Check if product exists and get stock
+        query = "SELECT product_id, product_name, quantity FROM products WHERE product_id = %s"
+        result = query_db(conn, query, (product_id,))
+        close_db(conn)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        product = result[0]
+        return {
+            "product_id": product["product_id"],
+            "product_name": product["product_name"],
+            "current_stock": product["quantity"],
+            "available": product["quantity"] > 0
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/products/{product_id}/reserve-stock")
+async def reserve_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        if quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+        
+        conn = connect_inventory_db()
+        
+        # Check if product exists and has sufficient stock
+        query = "SELECT product_id, product_name, quantity FROM products WHERE product_id = %s"
+        result = query_db(conn, query, (product_id,))
+        
+        if not result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        product = result[0]
+        current_stock = product["quantity"]
+        
+        if current_stock < quantity:
+            close_db(conn)
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient stock. Available: {current_stock}, Requested: {quantity}"
+            )
+        
+        # Reserve stock by reducing available quantity
+        update_query = "UPDATE products SET quantity = %s WHERE product_id = %s"
+        new_stock = current_stock - quantity
+        execute_db(conn, update_query, (new_stock, product_id))
+        
+        close_db(conn)
+        return {
+            "message": "Stock reserved successfully",
+            "product_id": product_id,
+            "reserved_quantity": quantity,
+            "remaining_stock": new_stock
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/products/{product_id}/release-stock")
+async def release_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        if quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+        
+        conn = connect_inventory_db()
+        
+        # Check if product exists
+        query = "SELECT product_id, product_name, quantity FROM products WHERE product_id = %s"
+        result = query_db(conn, query, (product_id,))
+        
+        if not result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        product = result[0]
+        current_stock = product["quantity"]
+        
+        # Release stock by increasing available quantity
+        update_query = "UPDATE products SET quantity = %s WHERE product_id = %s"
+        new_stock = current_stock + quantity
+        execute_db(conn, update_query, (new_stock, product_id))
+        
+        close_db(conn)
+        return {
+            "message": "Stock released successfully",
+            "product_id": product_id,
+            "released_quantity": quantity,
+            "current_stock": new_stock
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/products/{product_id}/validate-stock")
+async def validate_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        if quantity <= 0:
+            raise HTTPException(status_code=400, detail="Quantity must be greater than 0")
+        
+        conn = connect_inventory_db()
+        
+        # Check if product exists and has sufficient stock
+        query = "SELECT product_id, product_name, quantity FROM products WHERE product_id = %s"
+        result = query_db(conn, query, (product_id,))
+        close_db(conn)
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        product = result[0]
+        current_stock = product["quantity"]
+        
+        return {
+            "product_id": product_id,
+            "product_name": product["product_name"],
+            "current_stock": current_stock,
+            "requested_quantity": quantity,
+            "available": current_stock >= quantity,
+            "sufficient_stock": current_stock >= quantity
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/products/stats")
 def get_custom_inventory(
     columns: List[str] = Query(..., description="Columns to select, e.g., product_name, market_price, brand_id"),
     sort_by: str = Query("product_name", description="Column to sort by"),
@@ -529,3 +709,109 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ========== ADMIN STOCK MANAGEMENT ROUTES ==========
+@app.post("/admin/products/{product_id}/reserve-stock")
+async def admin_reserve_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        conn = connect_inventory_db()
+        
+        # Check if product exists
+        product_query = "SELECT quantity FROM products WHERE product_id = %s"
+        product_result = query_db(conn, product_query, (product_id,))
+        
+        if not product_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        current_stock = product_result[0]["quantity"]
+        
+        if current_stock < quantity:
+            close_db(conn)
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient stock. Available: {current_stock}, Requested: {quantity}"
+            )
+        
+        # Reserve stock
+        new_stock = current_stock - quantity
+        update_query = "UPDATE products SET quantity = %s WHERE product_id = %s"
+        execute_db(conn, update_query, (new_stock, product_id))
+        
+        close_db(conn)
+        
+        return {
+            "message": f"Stock reserved successfully",
+            "product_id": product_id,
+            "quantity_reserved": quantity,
+            "remaining_stock": new_stock
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/products/{product_id}/release-stock")
+async def admin_release_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        conn = connect_inventory_db()
+        
+        # Check if product exists
+        product_query = "SELECT quantity FROM products WHERE product_id = %s"
+        product_result = query_db(conn, product_query, (product_id,))
+        
+        if not product_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        current_stock = product_result[0]["quantity"]
+        
+        # Release stock back to inventory
+        new_stock = current_stock + quantity
+        update_query = "UPDATE products SET quantity = %s WHERE product_id = %s"
+        execute_db(conn, update_query, (new_stock, product_id))
+        
+        close_db(conn)
+        
+        return {
+            "message": f"Stock released successfully",
+            "product_id": product_id,
+            "quantity_released": quantity,
+            "current_stock": new_stock
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/products/{product_id}/validate-stock")
+async def admin_validate_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        conn = connect_inventory_db()
+        
+        # Check if product exists
+        product_query = "SELECT quantity FROM products WHERE product_id = %s"
+        product_result = query_db(conn, product_query, (product_id,))
+        
+        if not product_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        current_stock = product_result[0]["quantity"]
+        available = current_stock >= quantity
+        
+        close_db(conn)
+        
+        return {
+            "product_id": product_id,
+            "available": available,
+            "current_stock": current_stock,
+            "requested_quantity": quantity
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

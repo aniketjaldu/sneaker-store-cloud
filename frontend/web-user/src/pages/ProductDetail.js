@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { FaStar, FaShoppingCart, FaArrowLeft, FaHeart } from 'react-icons/fa';
-import axios from 'axios';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { FaStar, FaShoppingCart, FaHeart } from 'react-icons/fa';
+import api from '../utils/api';
 
 const ProductDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
@@ -16,7 +17,7 @@ const ProductDetail = () => {
 
   const fetchProduct = async () => {
     try {
-      const response = await axios.get(`/inventory/${id}`);
+      const response = await api.get(`/inventory/${id}`);
       setProduct(response.data);
     } catch (error) {
       console.error('Error fetching product:', error);
@@ -28,12 +29,20 @@ const ProductDetail = () => {
   const addToCart = async () => {
     setAddingToCart(true);
     try {
-      await axios.post('/cart/add', null, {
+      await api.post('/cart/add', null, {
         params: { product_id: id, quantity }
       });
-      // You could add a success notification here
+      alert('Product added to cart successfully!');
     } catch (error) {
       console.error('Error adding to cart:', error);
+      if (error.response?.status === 401) {
+        const shouldLogin = window.confirm('You need to login to add items to cart. Would you like to login now?');
+        if (shouldLogin) {
+          navigate('/login');
+        }
+      } else {
+        alert('Failed to add product to cart. Please try again.');
+      }
     } finally {
       setAddingToCart(false);
     }
@@ -151,10 +160,6 @@ const ProductDetail = () => {
             <h3 className="text-lg font-semibold text-gray-900">Product Details</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="font-medium text-gray-700">Product Code:</span>
-                <span className="ml-2 text-gray-600">{product.product_code || 'N/A'}</span>
-              </div>
-              <div>
                 <span className="font-medium text-gray-700">Brand:</span>
                 <span className="ml-2 text-gray-600">{product.brand_name}</span>
               </div>
@@ -180,7 +185,20 @@ const ProductDetail = () => {
                 >
                   -
                 </button>
-                <span className="px-4 py-2 border-x border-gray-300">{quantity}</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    setQuantity(Math.max(1, value));
+                  }}
+                  onBlur={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    setQuantity(Math.max(1, value));
+                  }}
+                  className="px-4 py-2 border-x border-gray-300 text-center w-16 focus:outline-none focus:ring-2 focus:ring-primary-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
                 <button
                   onClick={() => setQuantity(quantity + 1)}
                   className="px-3 py-2 text-gray-600 hover:text-gray-800"

@@ -632,8 +632,113 @@ async def update_user_role(user_id: int, request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-  
+
+# ========== ADMIN ORDER ROUTES ==========
+@app.get("/admin/orders")
+async def get_all_orders():
+    try:
+        conn = connect_user_db()
+        
+        # Get all orders with user information
+        query = """
+            SELECT o.*, u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            ORDER BY o.order_date DESC
+        """
+        orders = query_db(conn, query)
+        
+        # For each order, get order items
+        for order in orders:
+            items_query = """
+                SELECT product_id, quantity, unit_price, total_price
+                FROM order_items
+                WHERE order_id = %s
+            """
+            items = query_db(conn, items_query, (order["order_id"],))
+            order["items"] = items
+        
+        close_db(conn)
+        return orders
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/orders/{order_id}")
+async def get_admin_order_details(order_id: int):
+    try:
+        conn = connect_user_db()
+        
+        # Get the order with user information
+        order_query = """
+            SELECT o.*, u.first_name, u.last_name, u.email
+            FROM orders o
+            JOIN users u ON o.user_id = u.user_id
+            WHERE o.order_id = %s
+        """
+        order_result = query_db(conn, order_query, (order_id,))
+        if not order_result:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        order = order_result[0]
+        
+        # Get order items
+        items_query = """
+            SELECT product_id, quantity, unit_price, total_price
+            FROM order_items
+            WHERE order_id = %s
+        """
+        items = query_db(conn, items_query, (order_id,))
+        order["items"] = items
+        
+        close_db(conn)
+        return order
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ========== ORDER MANAGEMENT ==========
+@app.put("/admin/orders/{order_id}/status")
+async def update_admin_order_status(order_id: int, request: Request):
+    try:
+        data = await request.json()
+        new_status = data.get("status")
+        
+        if not new_status:
+            raise HTTPException(status_code=400, detail="Status is required")
+        
+        conn = connect_user_db()
+        
+        # Get current order status
+        current_status_query = "SELECT status FROM orders WHERE order_id = %s"
+        current_result = query_db(conn, current_status_query, (order_id,))
+        if not current_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        current_status = current_result[0]["status"]
+        
+        # Update order status
+        update_query = "UPDATE orders SET status = %s WHERE order_id = %s"
+        execute_db(conn, update_query, (new_status, order_id))
+        
+        # Get order items for stock management
+        items_query = "SELECT product_id, quantity FROM order_items WHERE order_id = %s"
+        order_items = query_db(conn, items_query, (order_id,))
+        
+        # Note: Stock management should be handled by the BFF layer
+        # The BFF will coordinate with inventory service for stock operations
+        # This service should only handle order status updates
+        
+        close_db(conn)
+        return {"message": f"Order status updated to '{new_status}' successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ========== SHOPPING CART ==========
 # GET /users/{user_id}/cart
@@ -813,7 +918,7 @@ async def get_order_details(user_id: int, order_id: int):
 
 # Create order from cart (checkout)
 @app.post("/users/{user_id}/orders")
-async def create_order(user_id: int):
+async def create_order(user_id: int, request: Request):
     try:
         conn = connect_user_db()
 
@@ -836,22 +941,40 @@ async def create_order(user_id: int):
         
         user_email = user_result[0]["email"]
         
-        # Create order with required fields
+        # Get order data from request (provided by BFF)
+        order_data = await request.json()
+        total_amount = order_data.get("total_amount", 0.0)
+        order_items_data = order_data.get("order_items", [])
+        
+        # If no order data provided, use placeholder values
+        if not order_items_data:
+            for item in cart_items:
+                order_items_data.append({
+                    "product_id": item["product_id"],
+                    "quantity": item["quantity"],
+                    "unit_price": 0.0,
+                    "total_price": 0.0
+                })
+        
+        # Create order with calculated total amount
         order_query = "INSERT INTO orders (user_id, order_date, email, total_amount) VALUES (%s, NOW(), %s, %s)"
         cursor = conn.cursor()
-        cursor.execute(order_query, (user_id, user_email, 0.0))  # Placeholder total_amount
+        cursor.execute(order_query, (user_id, user_email, total_amount))
         order_id = cursor.lastrowid
 
-        # Add order items
-        for item in cart_items:
+        # Add order items with actual prices
+        for item_data in order_items_data:
             item_query = """
                 INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price)
                 VALUES (%s, %s, %s, %s, %s)
             """
-            # Placeholder price (e.g., 0.0), replace with actual pricing logic later
-            unit_price = 0.0
-            total_price = unit_price * item["quantity"]
-            execute_db(conn, item_query, (order_id, item["product_id"], item["quantity"], unit_price, total_price))
+            execute_db(conn, item_query, (
+                order_id, 
+                item_data["product_id"], 
+                item_data["quantity"], 
+                item_data["unit_price"], 
+                item_data["total_price"]
+            ))
 
         # Clear cart
         clear_cart_query = "DELETE FROM shopping_cart WHERE user_id = %s"
@@ -860,8 +983,6 @@ async def create_order(user_id: int):
         conn.commit()
         cursor.close()
         close_db(conn)
-
-
 
         return {"message": "Order placed successfully", "order_id": order_id}
 

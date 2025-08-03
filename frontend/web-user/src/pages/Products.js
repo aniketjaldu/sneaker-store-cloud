@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { FaSearch, FaFilter, FaSort, FaStar, FaShoppingCart } from 'react-icons/fa';
-import axios from 'axios';
+import { Link, useNavigate } from 'react-router-dom';
+import { FaSearch, FaFilter, FaStar, FaShoppingCart } from 'react-icons/fa';
+import api from '../utils/api';
 
 const Products = () => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
@@ -32,7 +33,7 @@ const Products = () => {
 
   const fetchFilterOptions = async () => {
     try {
-      const response = await axios.get('/inventory/filters');
+      const response = await api.get('/inventory/filters');
       setFilterOptions(response.data);
     } catch (error) {
       console.error('Error fetching filter options:', error);
@@ -50,7 +51,7 @@ const Products = () => {
         }
       });
       
-      const response = await axios.get('/inventory', { params });
+      const response = await api.get('/inventory', { params });
       const data = response.data;
       if (Array.isArray(data)) {
         setProducts(data);
@@ -88,12 +89,20 @@ const Products = () => {
 
   const addToCart = async (productId) => {
     try {
-      await axios.post('/cart/add', null, {
+      await api.post('/cart/add', null, {
         params: { product_id: productId, quantity: 1 }
       });
-      // You could add a toast notification here
+      alert('Product added to cart successfully!');
     } catch (error) {
       console.error('Error adding to cart:', error);
+      if (error.response?.status === 401) {
+        const shouldLogin = window.confirm('You need to login to add items to cart. Would you like to login now?');
+        if (shouldLogin) {
+          navigate('/login');
+        }
+      } else {
+        alert('Failed to add product to cart. Please try again.');
+      }
     }
   };
 
@@ -146,7 +155,9 @@ const Products = () => {
               >
                 <option value="">All Brands</option>
                 {filterOptions.brands?.map((brand) => (
-                  <option key={brand} value={brand}>{brand}</option>
+                  <option key={brand.brand_id || brand} value={brand.brand_name || brand}>
+                    {brand.brand_name || brand}
+                  </option>
                 ))}
               </select>
             </div>
@@ -230,7 +241,7 @@ const Products = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {products.map((product) => (
-            <div key={product.id} className="bg-white rounded-lg shadow-md overflow-hidden product-card">
+            <div key={product.product_id} className="bg-white rounded-lg shadow-md overflow-hidden product-card">
               <div className="aspect-w-1 aspect-h-1 bg-gray-200">
                 <div className="w-full h-48 bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center">
                   <span className="text-gray-500 text-lg font-medium">
@@ -266,13 +277,13 @@ const Products = () => {
                 
                 <div className="flex space-x-2">
                   <Link
-                    to={`/products/${product.id}`}
+                    to={`/products/${product.product_id}`}
                     className="flex-1 bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors text-center"
                   >
                     View Details
                   </Link>
                   <button
-                    onClick={() => addToCart(product.id)}
+                    onClick={() => addToCart(product.product_id)}
                     className="bg-secondary-500 text-white px-4 py-2 rounded-lg hover:bg-secondary-600 transition-colors"
                   >
                     <FaShoppingCart />
