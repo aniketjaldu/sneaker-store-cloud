@@ -11,8 +11,8 @@ app = fastapi.FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=False,  # Set to False when using allow_origins=["*"]
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -161,8 +161,7 @@ def request_password_reset(reset_request: PasswordResetRequest):
         if response.status_code != 200:
             return reset_result
         
-        # If password reset was successful, we need to send the email
-        # The user service should return the user_id and reset_token
+        # Send password reset email if successful
         user_id = reset_result.get("user_id")
         reset_token = reset_result.get("reset_token")
         
@@ -572,9 +571,15 @@ def create_order(order_data: dict = {}, current_user: dict = Depends(get_current
                 "total_price": total_price
             })
         
-        # Create order in user service with calculated prices
+        # Calculate tax and total with tax
+        tax_amount = round(total_amount * 0.0625, 2)
+        total_with_tax = round(total_amount + tax_amount, 2)
+        
+        # Create order in user service with calculated prices including tax
         order_request = {
-            "total_amount": total_amount,
+            "subtotal_amount": total_amount,
+            "tax_amount": tax_amount,
+            "total_amount": total_with_tax,
             "order_items": order_items_data
         }
         
