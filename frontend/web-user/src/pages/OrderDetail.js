@@ -96,7 +96,14 @@ const OrderDetail = () => {
               Order #{order.order_id}
             </h1>
             <p className="text-gray-600 mt-2">
-              Placed on {new Date(order.order_date).toLocaleDateString()} at {new Date(order.order_date).toLocaleTimeString()}
+              Placed on {new Date(order.order_date).toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+              })}
             </p>
           </div>
           <div className="text-right">
@@ -115,7 +122,14 @@ const OrderDetail = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Order Date:</span>
-                <span className="font-medium">{new Date(order.order_date).toLocaleDateString()}</span>
+                <span className="font-medium">{new Date(order.order_date).toLocaleString('en-US', {
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                  hour12: true
+                })}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Status:</span>
@@ -140,12 +154,12 @@ const OrderDetail = () => {
                 <span className="font-medium">${calculateOrderTotal(order.items || []).toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-gray-600">Tax (8%):</span>
-                <span className="font-medium">${(calculateOrderTotal(order.items || []) * 0.08).toFixed(2)}</span>
+                <span className="text-gray-600">Tax (6.25%):</span>
+                <span className="font-medium">${(calculateOrderTotal(order.items || []) * 0.0625).toFixed(2)}</span>
               </div>
               <div className="flex justify-between border-t pt-2">
                 <span className="text-gray-900 font-semibold">Total:</span>
-                <span className="text-gray-900 font-bold">${(calculateOrderTotal(order.items || []) * 1.08).toFixed(2)}</span>
+                <span className="text-gray-900 font-bold">${(calculateOrderTotal(order.items || []) * 1.0625).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -209,7 +223,14 @@ const OrderDetail = () => {
             </div>
             <div>
               <p className="font-medium text-gray-900">Order Placed</p>
-              <p className="text-sm text-gray-600">{new Date(order.order_date).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-600">{new Date(order.order_date).toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+              })}</p>
             </div>
           </div>
           

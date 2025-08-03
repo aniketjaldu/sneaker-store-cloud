@@ -1,6 +1,5 @@
 import requests
 import json
-import sys
 import os
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -305,6 +304,9 @@ class AdminCLI:
             print(f"Email: {data.get('email', 'N/A')}")
             print(f"Status: {data.get('order_status', 'N/A')}")
             print(f"Created: {data.get('order_date', 'N/A')}")
+            print(f"Subtotal: ${data.get('subtotal_amount', 0):.2f}")
+            print(f"Tax: ${data.get('tax_amount', 0):.2f}")
+            print(f"Total: ${data.get('total_amount', 0):.2f}")
             if 'items' in data:
                 print(f"Items ({len(data['items'])}):")
                 for item in data['items']:

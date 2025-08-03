@@ -112,7 +112,14 @@ const Orders = () => {
                       Order #{order.order_id}
                     </h3>
                     <p className="text-sm text-gray-600">
-                      Placed on {new Date(order.order_date || Date.now()).toLocaleDateString()}
+                      Placed on {new Date(order.order_date || Date.now()).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                      })}
                     </p>
                   </div>
                   <div className="flex items-center space-x-4">
@@ -165,16 +172,40 @@ const Orders = () => {
 
                 {/* Order Summary */}
                 <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm text-gray-600">
-                        {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-gray-900">
-                        Total: ${calculateOrderTotal(order.items || []).toFixed(2)}
-                      </p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-gray-600">
+                          {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'items'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        {order.subtotal_amount && order.tax_amount && order.total_amount ? (
+                          <>
+                            <p className="text-sm text-gray-600">
+                              Subtotal: ${order.subtotal_amount.toFixed(2)}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Tax (6.25%): ${order.tax_amount.toFixed(2)}
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              Total: ${order.total_amount.toFixed(2)}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-sm text-gray-600">
+                              Subtotal: ${calculateOrderTotal(order.items || []).toFixed(2)}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              Tax (6.25%): ${(calculateOrderTotal(order.items || []) * 0.0625).toFixed(2)}
+                            </p>
+                            <p className="text-lg font-bold text-gray-900">
+                              Total: ${(calculateOrderTotal(order.items || []) * 1.0625).toFixed(2)}
+                            </p>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

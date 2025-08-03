@@ -13,7 +13,8 @@ const Profile = () => {
     last_name: '',
     email: '',
     phone: '',
-    address: '',
+    address_line1: '',
+    address_line2: '',
     city: '',
     state: '',
     zip_code: ''
@@ -31,11 +32,12 @@ const Profile = () => {
         first_name: response.data.first_name || '',
         last_name: response.data.last_name || '',
         email: response.data.email || '',
-        phone: response.data.phone || '',
-        address: response.data.address || '',
-        city: response.data.city || '',
-        state: response.data.state || '',
-        zip_code: response.data.zip_code || ''
+        phone: response.data.shipping_address?.phone || '',
+        address_line1: response.data.shipping_address?.line1 || '',
+        address_line2: response.data.shipping_address?.line2 || '',
+        city: response.data.shipping_address?.city || '',
+        state: response.data.shipping_address?.state || '',
+        zip_code: response.data.shipping_address?.zip_code || ''
       });
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -54,11 +56,17 @@ const Profile = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Only send fields that exist in the users table
+      // Send user data and address data
       const userData = {
         first_name: formData.first_name,
         last_name: formData.last_name,
-        email: formData.email
+        email: formData.email,
+        phone: formData.phone,
+        address_line1: formData.address_line1,
+        address_line2: formData.address_line2,
+        address_city: formData.city,
+        address_state: formData.state,
+        address_zip_code: formData.zip_code
       };
       
       await api.put('/profile', userData);
@@ -76,11 +84,12 @@ const Profile = () => {
       first_name: profile.first_name || '',
       last_name: profile.last_name || '',
       email: profile.email || '',
-      phone: profile.phone || '',
-      address: profile.address || '',
-      city: profile.city || '',
-      state: profile.state || '',
-      zip_code: profile.zip_code || ''
+      phone: profile.shipping_address?.phone || '',
+      address_line1: profile.shipping_address?.line1 || '',
+      address_line2: profile.shipping_address?.line2 || '',
+      city: profile.shipping_address?.city || '',
+      state: profile.shipping_address?.state || '',
+      zip_code: profile.shipping_address?.zip_code || ''
     });
     setEditing(false);
   };
@@ -207,7 +216,7 @@ const Profile = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 ) : (
-                  <p className="text-gray-900">{profile?.phone || 'Not provided'}</p>
+                  <p className="text-gray-900">{profile?.shipping_address?.phone || 'Not provided'}</p>
                 )}
               </div>
             </div>
@@ -220,18 +229,35 @@ const Profile = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Address
+                  Address Line 1
                 </label>
                 {editing ? (
                   <input
                     type="text"
-                    name="address"
-                    value={formData.address}
+                    name="address_line1"
+                    value={formData.address_line1}
                     onChange={handleChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 ) : (
-                  <p className="text-gray-900">{profile?.address || 'Not provided'}</p>
+                  <p className="text-gray-900">{profile?.shipping_address?.line1 || 'Not provided'}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Address Line 2
+                </label>
+                {editing ? (
+                  <input
+                    type="text"
+                    name="address_line2"
+                    value={formData.address_line2}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                ) : (
+                  <p className="text-gray-900">{profile?.shipping_address?.line2 || 'Not provided'}</p>
                 )}
               </div>
 
@@ -249,7 +275,7 @@ const Profile = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   ) : (
-                    <p className="text-gray-900">{profile?.city || 'Not provided'}</p>
+                    <p className="text-gray-900">{profile?.shipping_address?.city || 'Not provided'}</p>
                   )}
                 </div>
 
@@ -266,7 +292,7 @@ const Profile = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   ) : (
-                    <p className="text-gray-900">{profile?.state || 'Not provided'}</p>
+                    <p className="text-gray-900">{profile?.shipping_address?.state || 'Not provided'}</p>
                   )}
                 </div>
 
@@ -283,7 +309,7 @@ const Profile = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     />
                   ) : (
-                    <p className="text-gray-900">{profile?.zip_code || 'Not provided'}</p>
+                    <p className="text-gray-900">{profile?.shipping_address?.zip_code || 'Not provided'}</p>
                   )}
                 </div>
               </div>
