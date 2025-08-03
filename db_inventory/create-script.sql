@@ -30,13 +30,6 @@ CREATE TABLE products (
     REFERENCES brands (brand_id)
 );
 
-CREATE TABLE orders (
-    order_id      INT AUTO_INCREMENT    PRIMARY KEY,
-    product_id    INT,
-    quantity      INT,
-    order_date    TIMESTAMP             DEFAULT CURRENT_TIMESTAMP()
-);
-
 /********************************************************
  *                      INSERTS                         *
  ********************************************************/

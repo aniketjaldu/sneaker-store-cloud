@@ -563,6 +563,8 @@ async def get_all_users(
 async def get_user_details(user_id: int):
     try:
         conn = connect_user_db()
+        
+        # Get user information with role
         query = """
             SELECT u.*, ur.role
             FROM users u
@@ -570,12 +572,29 @@ async def get_user_details(user_id: int):
             WHERE u.user_id = %s
         """
         result = query_db(conn, query, (user_id,))
-        close_db(conn)
         
         if not result:
+            close_db(conn)
             raise HTTPException(status_code=404, detail="User not found")
-            
-        return result[0]
+        
+        user = result[0]
+        
+        # Get shipping address if exists
+        if user.get("shipping_address_id"):
+            shipping_query = "SELECT * FROM addresses WHERE address_id = %s"
+            shipping_result = query_db(conn, shipping_query, (user["shipping_address_id"],))
+            if shipping_result:
+                user["shipping_address"] = shipping_result[0]
+        
+        # Get billing address if exists
+        if user.get("billing_address_id"):
+            billing_query = "SELECT * FROM addresses WHERE address_id = %s"
+            billing_result = query_db(conn, billing_query, (user["billing_address_id"],))
+            if billing_result:
+                user["billing_address"] = billing_result[0]
+        
+        close_db(conn)
+        return user
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -585,12 +604,22 @@ async def create_user(user: UserCreateRequest):
     try:
         conn = connect_user_db()
         
+        # Check if email already exists
+        check_query = "SELECT user_id FROM users WHERE email = %s"
+        existing_user = query_db(conn, check_query, (user.email,))
+        
+        if existing_user:
+            raise HTTPException(status_code=409, detail="Email already registered")
+        
+        # Hash password
+        hashed_password = hash_password(user.password)
+        
         # Insert user into the users table
         user_query = """
             INSERT INTO users (first_name, last_name, email, password)
             VALUES (%s, %s, %s, %s)
         """
-        user_values = (user.first_name, user.last_name, user.email, user.password)
+        user_values = (user.first_name, user.last_name, user.email, hashed_password)
         cursor = conn.cursor()
         cursor.execute(user_query, user_values)
         user_id = cursor.lastrowid
@@ -608,6 +637,8 @@ async def create_user(user: UserCreateRequest):
         close_db(conn)
         return {"message": "User created successfully", "user_id": user_id}
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -724,18 +755,58 @@ async def update_user_role(user_id: int, request: Request):
 
 # ========== ADMIN ORDER ROUTES ==========
 @app.get("/admin/orders")
-async def get_all_orders():
+async def get_all_orders(
+    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    status: Optional[str] = Query(None, description="Filter by order status"),
+    date_from: Optional[str] = Query(None, description="Filter orders from date (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="Filter orders to date (YYYY-MM-DD)"),
+    search: Optional[str] = Query(None, description="Search by customer name or email"),
+    limit: Optional[int] = Query(50, description="Number of results to return"),
+    offset: Optional[int] = Query(0, description="Number of results to skip")
+):
     try:
         conn = connect_user_db()
         
-        # Get all orders with user information
+        # Build the base query with user information
         query = """
             SELECT o.*, u.first_name, u.last_name, u.email
             FROM orders o
             JOIN users u ON o.user_id = u.user_id
-            ORDER BY o.order_date DESC
         """
-        orders = query_db(conn, query)
+        
+        # Build WHERE clause with filters
+        filters = []
+        params = []
+        
+        if user_id is not None:
+            filters.append("o.user_id = %s")
+            params.append(user_id)
+        
+        if status:
+            filters.append("o.order_status = %s")
+            params.append(status)
+        
+        if date_from:
+            filters.append("DATE(o.order_date) >= %s")
+            params.append(date_from)
+        
+        if date_to:
+            filters.append("DATE(o.order_date) <= %s")
+            params.append(date_to)
+        
+        if search:
+            filters.append("(u.first_name LIKE %s OR u.last_name LIKE %s OR u.email LIKE %s)")
+            search_param = f"%{search}%"
+            params.extend([search_param, search_param, search_param])
+        
+        if filters:
+            query += " WHERE " + " AND ".join(filters)
+        
+        # Add ordering and pagination
+        query += " ORDER BY o.order_date DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+        
+        orders = query_db(conn, query, tuple(params))
         
         # For each order, get order items
         for order in orders:

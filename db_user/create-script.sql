@@ -57,18 +57,6 @@ CREATE TABLE password_reset_tokens (
     FOREIGN KEY (user_id) REFERENCES users (user_id) ON DELETE CASCADE
 );
 
-CREATE TABLE payment_methods (
-    payment_method_id       INT             PRIMARY KEY     AUTO_INCREMENT,
-    user_id                 INT             NOT NULL,
-    billing_address_id      INT             NOT NULL,
-    card_last_four          VARCHAR(4)      NOT NULL,
-    card_type               VARCHAR(60)     NOT NULL,
-    expiration_month        INT             NOT NULL,
-    expiration_year         INT             NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users (user_id),
-    FOREIGN KEY(billing_address_id) REFERENCES addresses (address_id)
-);
-
 CREATE TABLE orders (
     order_id                INT             PRIMARY KEY     AUTO_INCREMENT,
     user_id                 INT             NOT NULL,
@@ -80,11 +68,9 @@ CREATE TABLE orders (
     tax_amount              DECIMAL(10,2)   NOT NULL,
     total_amount            DECIMAL(10,2)   NOT NULL,
     order_status            ENUM('pending', 'processing', 'shipped', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
-    payment_method_id       INT             DEFAULT NULL,
     FOREIGN KEY (user_id) REFERENCES users (user_id),
     FOREIGN KEY (shipping_address_id) REFERENCES addresses (address_id),
-    FOREIGN KEY (billing_address_id) REFERENCES addresses (address_id),
-    FOREIGN KEY (payment_method_id) REFERENCES payment_methods (payment_method_id)
+    FOREIGN KEY (billing_address_id) REFERENCES addresses (address_id)
 );
 
 CREATE TABLE order_items (
@@ -141,18 +127,11 @@ INSERT INTO user_roles (user_id, role) VALUES
     (8, 'customer'),
     (9, 'customer');
 
-INSERT INTO payment_methods (payment_method_id, user_id, billing_address_id, card_last_four, card_type, expiration_month, expiration_year) VALUES
-    (1, 1, 1, '4242', 'Visa', 12, 2027),
-    (2, 2, 2, '1111', 'MasterCard', 6, 2026),
-    (3, 3, 3, '5678', 'Amex', 3, 2028),
-    (4, 5, 4, '9999', 'Discover', 9, 2025),
-    (5, 5, 5, '3456', 'Visa', 1, 2029);
-
 -- Sample orders
-INSERT INTO orders (order_id, user_id, order_date, shipping_address_id, billing_address_id, email, subtotal_amount, tax_amount, total_amount, order_status, payment_method_id) VALUES
-    (1, 5, '2024-01-15 10:30:00', 1, 1, 'alice.johnson@example.com', 122.34, 7.65, 129.99, 'delivered', 1),
-    (2, 6, '2024-01-20 14:15:00', 2, 2, 'bob.smith@example.com', 169.40, 10.59, 179.99, 'shipped', 2),
-    (3, 7, '2024-01-25 09:45:00', 3, 3, 'carol.davis@example.com', 94.11, 5.88, 99.99, 'processing', 3);
+INSERT INTO orders (order_id, user_id, order_date, shipping_address_id, billing_address_id, email, subtotal_amount, tax_amount, total_amount, order_status) VALUES
+    (1, 5, '2024-01-15 10:30:00', 1, 1, 'alice.johnson@example.com', 122.34, 7.65, 129.99, 'delivered'),
+    (2, 6, '2024-01-20 14:15:00', 2, 2, 'bob.smith@example.com', 169.40, 10.59, 179.99, 'shipped'),
+    (3, 7, '2024-01-25 09:45:00', 3, 3, 'carol.davis@example.com', 94.11, 5.88, 99.99, 'processing');
 
 -- Sample order items
 INSERT INTO order_items (order_item_id, order_id, product_id, quantity, unit_price, total_price) VALUES
