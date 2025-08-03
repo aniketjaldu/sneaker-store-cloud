@@ -332,7 +332,49 @@ def get_order_details(order_id: int, current_admin: dict = Depends(get_current_a
 @app.put("/orders/{order_id}/status")
 def update_order_status(order_id: int, status: str = Query(..., description="New order status"), current_admin: dict = Depends(get_current_admin)):
     try:
+        # First, get the current order status and items
+        order_response = requests.get(f"http://user-service:8080/admin/orders/{order_id}")
+        if order_response.status_code != 200:
+            return order_response.json()
+        
+        order_data = order_response.json()
+        current_status = order_data.get("status", "pending")
+        
+        # Update order status in user service
         response = requests.put(f"http://user-service:8080/admin/orders/{order_id}/status", json={"status": status})
+        if response.status_code != 200:
+            return response.json()
+        
+        # Handle stock management based on status transition
+        if "items" in order_data:
+            for item in order_data["items"]:
+                product_id = item.get("product_id")
+                quantity = item.get("quantity", 1)
+                
+                try:
+                    # Stock management logic based on status transitions
+                    if current_status == "pending" and status in ["cancelled", "refunded"]:
+                        # Order cancelled/refunded - release stock back to inventory
+                        release_response = requests.post(f"http://inventory-service:8080/admin/products/{product_id}/release-stock?quantity={quantity}")
+                        if release_response.status_code != 200:
+                            print(f"Warning: Failed to release stock for product {product_id}")
+                    
+                    elif current_status in ["cancelled", "refunded"] and status == "pending":
+                        # Order reactivated - reserve stock again
+                        reserve_response = requests.post(f"http://inventory-service:8080/admin/products/{product_id}/reserve-stock?quantity={quantity}")
+                        if reserve_response.status_code != 200:
+                            print(f"Warning: Failed to reserve stock for product {product_id}")
+                    
+                    elif current_status == "pending" and status in ["processing", "shipped", "delivered"]:
+                        # Order confirmed - ensure stock is reserved (should already be done during order creation)
+                        # This is a safety check in case stock wasn't properly reserved during order creation
+                        validate_response = requests.post(f"http://inventory-service:8080/admin/products/{product_id}/validate-stock?quantity={quantity}")
+                        if validate_response.status_code != 200:
+                            print(f"Warning: Stock validation failed for product {product_id}")
+                    
+                except requests.RequestException as e:
+                    print(f"Warning: Failed to manage stock for product {product_id}: {e}")
+        
         return response.json()
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="User service unavailable")

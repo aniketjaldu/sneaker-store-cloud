@@ -540,8 +540,45 @@ def create_order(order_data: dict = {}, current_user: dict = Depends(get_current
                     detail=f"Failed to reserve stock for product {product_id}"
                 )
         
-        # Create order in user service
-        response = requests.post(f"http://user-service:8080/users/{user_id}/orders", json=order_data)
+        # Get product details and calculate prices
+        total_amount = 0.0
+        order_items_data = []
+        
+        for item in cart_items if isinstance(cart_items, list) else [cart_items]:
+            product_id = item.get("product_id")
+            quantity = item.get("quantity", 1)
+            
+            # Get product details from inventory service
+            product_response = requests.get(f"http://inventory-service:8080/products/{product_id}")
+            if product_response.status_code != 200:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Failed to get product details for product {product_id}"
+                )
+            
+            product_data = product_response.json()
+            
+            # Calculate discounted price at time of purchase
+            market_price = product_data.get("market_price", 0)
+            discount_percent = product_data.get("discount_percent", 0)
+            unit_price = round(market_price * (1 - discount_percent / 100), 2)
+            total_price = round(unit_price * quantity, 2)
+            
+            total_amount += total_price
+            order_items_data.append({
+                "product_id": product_id,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "total_price": total_price
+            })
+        
+        # Create order in user service with calculated prices
+        order_request = {
+            "total_amount": total_amount,
+            "order_items": order_items_data
+        }
+        
+        response = requests.post(f"http://user-service:8080/users/{user_id}/orders", json=order_request)
         order_result = response.json()
         
         if response.status_code != 200:

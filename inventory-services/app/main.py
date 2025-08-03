@@ -709,3 +709,109 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# ========== ADMIN STOCK MANAGEMENT ROUTES ==========
+@app.post("/admin/products/{product_id}/reserve-stock")
+async def admin_reserve_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        conn = connect_inventory_db()
+        
+        # Check if product exists
+        product_query = "SELECT quantity FROM products WHERE product_id = %s"
+        product_result = query_db(conn, product_query, (product_id,))
+        
+        if not product_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        current_stock = product_result[0]["quantity"]
+        
+        if current_stock < quantity:
+            close_db(conn)
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Insufficient stock. Available: {current_stock}, Requested: {quantity}"
+            )
+        
+        # Reserve stock
+        new_stock = current_stock - quantity
+        update_query = "UPDATE products SET quantity = %s WHERE product_id = %s"
+        execute_db(conn, update_query, (new_stock, product_id))
+        
+        close_db(conn)
+        
+        return {
+            "message": f"Stock reserved successfully",
+            "product_id": product_id,
+            "quantity_reserved": quantity,
+            "remaining_stock": new_stock
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/products/{product_id}/release-stock")
+async def admin_release_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        conn = connect_inventory_db()
+        
+        # Check if product exists
+        product_query = "SELECT quantity FROM products WHERE product_id = %s"
+        product_result = query_db(conn, product_query, (product_id,))
+        
+        if not product_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        current_stock = product_result[0]["quantity"]
+        
+        # Release stock back to inventory
+        new_stock = current_stock + quantity
+        update_query = "UPDATE products SET quantity = %s WHERE product_id = %s"
+        execute_db(conn, update_query, (new_stock, product_id))
+        
+        close_db(conn)
+        
+        return {
+            "message": f"Stock released successfully",
+            "product_id": product_id,
+            "quantity_released": quantity,
+            "current_stock": new_stock
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/products/{product_id}/validate-stock")
+async def admin_validate_stock(product_id: int, quantity: int = Query(...)):
+    try:
+        conn = connect_inventory_db()
+        
+        # Check if product exists
+        product_query = "SELECT quantity FROM products WHERE product_id = %s"
+        product_result = query_db(conn, product_query, (product_id,))
+        
+        if not product_result:
+            close_db(conn)
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        current_stock = product_result[0]["quantity"]
+        available = current_stock >= quantity
+        
+        close_db(conn)
+        
+        return {
+            "product_id": product_id,
+            "available": available,
+            "current_stock": current_stock,
+            "requested_quantity": quantity
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

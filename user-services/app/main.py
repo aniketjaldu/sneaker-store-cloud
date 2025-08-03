@@ -699,64 +699,38 @@ async def get_admin_order_details(order_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ========== ORDER MANAGEMENT ==========
 @app.put("/admin/orders/{order_id}/status")
 async def update_admin_order_status(order_id: int, request: Request):
     try:
         data = await request.json()
         new_status = data.get("status")
+        
         if not new_status:
             raise HTTPException(status_code=400, detail="Status is required")
         
         conn = connect_user_db()
         
-        # Get current order status and items
-        order_query = """
-            SELECT o.order_status, oi.product_id, oi.quantity
-            FROM orders o
-            JOIN order_items oi ON o.order_id = oi.order_id
-            WHERE o.order_id = %s
-        """
-        order_data = query_db(conn, order_query, (order_id,))
-        
-        if not order_data:
+        # Get current order status
+        current_status_query = "SELECT status FROM orders WHERE order_id = %s"
+        current_result = query_db(conn, current_status_query, (order_id,))
+        if not current_result:
+            close_db(conn)
             raise HTTPException(status_code=404, detail="Order not found")
         
-        current_status = order_data[0]["order_status"]
+        current_status = current_result[0]["status"]
         
         # Update order status
-        update_query = "UPDATE orders SET order_status = %s WHERE order_id = %s"
+        update_query = "UPDATE orders SET status = %s WHERE order_id = %s"
         execute_db(conn, update_query, (new_status, order_id))
         
-        # Handle stock management based on status transition
-        import requests
+        # Get order items for stock management
+        items_query = "SELECT product_id, quantity FROM order_items WHERE order_id = %s"
+        order_items = query_db(conn, items_query, (order_id,))
         
-        for item in order_data:
-            product_id = item["product_id"]
-            quantity = item["quantity"]
-            
-            try:
-                # Stock management logic based on status transitions
-                if current_status == "pending" and new_status in ["cancelled", "refunded"]:
-                    # Order cancelled/refunded - release stock back to inventory
-                    release_response = requests.post(f"http://inventory-service:8080/products/{product_id}/release-stock?quantity={quantity}")
-                    if release_response.status_code != 200:
-                        print(f"Warning: Failed to release stock for product {product_id}")
-                
-                elif current_status in ["cancelled", "refunded"] and new_status == "pending":
-                    # Order reactivated - reserve stock again
-                    reserve_response = requests.post(f"http://inventory-service:8080/products/{product_id}/reserve-stock?quantity={quantity}")
-                    if reserve_response.status_code != 200:
-                        print(f"Warning: Failed to reserve stock for product {product_id}")
-                
-                elif current_status == "pending" and new_status in ["processing", "shipped", "delivered"]:
-                    # Order confirmed - ensure stock is reserved (should already be done during order creation)
-                    # This is a safety check in case stock wasn't properly reserved during order creation
-                    validate_response = requests.post(f"http://inventory-service:8080/products/{product_id}/validate-stock?quantity={quantity}")
-                    if validate_response.status_code != 200:
-                        print(f"Warning: Stock validation failed for product {product_id}")
-                
-            except requests.RequestException as e:
-                print(f"Warning: Failed to manage stock for product {product_id}: {e}")
+        # Note: Stock management should be handled by the BFF layer
+        # The BFF will coordinate with inventory service for stock operations
+        # This service should only handle order status updates
         
         close_db(conn)
         return {"message": f"Order status updated to '{new_status}' successfully"}
@@ -944,7 +918,7 @@ async def get_order_details(user_id: int, order_id: int):
 
 # Create order from cart (checkout)
 @app.post("/users/{user_id}/orders")
-async def create_order(user_id: int):
+async def create_order(user_id: int, request: Request):
     try:
         conn = connect_user_db()
 
@@ -967,51 +941,19 @@ async def create_order(user_id: int):
         
         user_email = user_result[0]["email"]
         
-        # Calculate total amount and get product prices
-        total_amount = 0.0
-        order_items_data = []
+        # Get order data from request (provided by BFF)
+        order_data = await request.json()
+        total_amount = order_data.get("total_amount", 0.0)
+        order_items_data = order_data.get("order_items", [])
         
-        for item in cart_items:
-            try:
-                # Get product details from inventory service
-                import requests
-                product_response = requests.get(f"http://inventory-service:8080/products/{item['product_id']}")
-                if product_response.status_code == 200:
-                    product_data = product_response.json()
-                    
-                    # Calculate discounted price at time of purchase
-                    market_price = product_data.get("market_price", 0)
-                    discount_percent = product_data.get("discount_percent", 0)
-                    unit_price = round(market_price * (1 - discount_percent / 100), 2)
-                    total_price = round(unit_price * item["quantity"], 2)
-                    
-                    total_amount += total_price
-                    order_items_data.append({
-                        "product_id": item["product_id"],
-                        "quantity": item["quantity"],
-                        "unit_price": unit_price,
-                        "total_price": total_price
-                    })
-                else:
-                    # Fallback if product not found
-                    unit_price = 0.0
-                    total_price = 0.0
-                    order_items_data.append({
-                        "product_id": item["product_id"],
-                        "quantity": item["quantity"],
-                        "unit_price": unit_price,
-                        "total_price": total_price
-                    })
-            except Exception as e:
-                print(f"Error getting product {item['product_id']}: {e}")
-                # Fallback
-                unit_price = 0.0
-                total_price = 0.0
+        # If no order data provided, use placeholder values
+        if not order_items_data:
+            for item in cart_items:
                 order_items_data.append({
                     "product_id": item["product_id"],
                     "quantity": item["quantity"],
-                    "unit_price": unit_price,
-                    "total_price": total_price
+                    "unit_price": 0.0,
+                    "total_price": 0.0
                 })
         
         # Create order with calculated total amount
