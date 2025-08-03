@@ -150,6 +150,30 @@ class AdminCLI:
             print(f"Name: {data['first_name']} {data['last_name']}")
             print(f"Email: {data['email']}")
             print(f"Role: {data.get('role', 'customer')}")
+            
+            # Display shipping address information
+            if data.get('shipping_address'):
+                shipping = data['shipping_address']
+                print(f"\n📍 Shipping Address:")
+                print(f"  Address: {shipping['line1']}")
+                if shipping.get('line2'):
+                    print(f"          {shipping['line2']}")
+                print(f"  City: {shipping['city']}, {shipping['state']} {shipping['zip_code']}")
+                print(f"  Phone: {shipping['phone']}")
+            else:
+                print(f"\n📍 Shipping Address: Not set")
+            
+            # Display billing address information
+            if data.get('billing_address'):
+                billing = data['billing_address']
+                print(f"\n💳 Billing Address:")
+                print(f"  Address: {billing['line1']}")
+                if billing.get('line2'):
+                    print(f"          {billing['line2']}")
+                print(f"  City: {billing['city']}, {billing['state']} {billing['zip_code']}")
+                print(f"  Phone: {billing['phone']}")
+            else:
+                print(f"\n💳 Billing Address: Not set")
     
     def create_user(self, first_name: str, last_name: str, email: str, password: str, role: str = "customer"):
         data = self.make_request("POST", "/users", json={
@@ -181,7 +205,7 @@ class AdminCLI:
         
         data = self.make_request("GET", "/inventory", params=params)
         if data:
-            headers = ["ID", "Product Name", "Brand", "Price", "Discount", "Final Price"]
+            headers = ["ID", "Product Name", "Brand", "Price", "Discount", "Final Price", "Quantity"]
             rows = []
             for product in data:
                 price = product.get('market_price', 0)
@@ -193,7 +217,8 @@ class AdminCLI:
                     product.get('brand_name', 'N/A'),
                     f"${price:.2f}",
                     f"{discount}%",
-                    f"${final_price:.2f}"
+                    f"${final_price:.2f}",
+                    product.get('quantity', 0)
                 ])
             
             title = f"📦 Products ({len(data)} found)"
@@ -216,19 +241,26 @@ class AdminCLI:
             print(f"Brand: {data.get('brand_name', 'N/A')}")
             print(f"Price: ${data.get('market_price', 0):.2f}")
             print(f"Discount: {data.get('discount_percent', 0)}%")
+            print(f"Quantity: {data.get('quantity', 0)}")
             print(f"Description: {data.get('description', 'No description')}")
     
     def create_product(self, brand_id: int, product_name: str, 
-                      market_price: float, discount_percent: float = 0, description: str = ""):
+                      market_price: float, discount_percent: float = 0, description: str = "", quantity: int = 0):
         data = self.make_request("POST", "/inventory", json={
             "brand_id": brand_id,
             "product_name": product_name,
             "description": description,
             "market_price": market_price,
-            "discount_percent": discount_percent
+            "discount_percent": discount_percent,
+            "quantity": quantity
         })
         if data:
             print(f"✅ Product created successfully: {data.get('product_id')}")
+    
+    def update_product(self, product_id: int, **kwargs):
+        data = self.make_request("PUT", f"/inventory/{product_id}", json=kwargs)
+        if data:
+            print(f"✅ Product updated successfully")
     
     def list_brands(self):
         data = self.make_request("GET", "/brands")
@@ -250,12 +282,20 @@ class AdminCLI:
         if data:
             print(f"✅ Brand created successfully: {data.get('brand_id')}")
     
-    def list_orders(self, user_id: Optional[int] = None, status: Optional[str] = None):
+    def list_orders(self, user_id: Optional[int] = None, status: Optional[str] = None, 
+                   search: Optional[str] = None, date_from: Optional[str] = None, 
+                   date_to: Optional[str] = None):
         params = {}
         if user_id:
             params["user_id"] = user_id
         if status:
             params["status"] = status
+        if search:
+            params["search"] = search
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
         
         data = self.make_request("GET", "/orders", params=params)
         if data:
@@ -284,6 +324,15 @@ class AdminCLI:
                 title += f" - User ID: {user_id}"
             if status:
                 title += f" - Status: {status}"
+            if search:
+                title += f" - Search: {search}"
+            if date_from or date_to:
+                date_range = []
+                if date_from:
+                    date_range.append(f"from {date_from}")
+                if date_to:
+                    date_range.append(f"to {date_to}")
+                title += f" - Date: {' '.join(date_range)}"
             
             print(format_table(headers, rows, title))
         else:
@@ -396,8 +445,9 @@ def print_product_menu():
     print("2.  Search Products")
     print("3.  Get Product Details")
     print("4.  Create New Product")
-    print("5.  List All Brands")
-    print("6.  Create New Brand")
+    print("5.  Update Product")
+    print("6.  List All Brands")
+    print("7.  Create New Brand")
     print("0.  Back to Main Menu")
     print("-"*40)
 
@@ -538,7 +588,7 @@ def product_management_loop():
     while True:
         clear_terminal()
         print_product_menu()
-        choice = input("\nEnter your choice (0-6): ").strip()
+        choice = input("\nEnter your choice (0-7): ").strip()
         
         if choice == "0":
             break
@@ -575,18 +625,72 @@ def product_management_loop():
             product_name = input("Product Name: ").strip()
             market_price = input("Market Price: ").strip()
             discount_percent = input("Discount % [0]: ").strip() or "0"
+            quantity = input("Quantity [0]: ").strip() or "0"
             description = input("Description [Enter for none]: ").strip() or ""
             try:
                 cli.create_product(int(brand_id), product_name, 
-                                 float(market_price), float(discount_percent), description)
+                                 float(market_price), float(discount_percent), description, int(quantity))
             except ValueError:
                 print("❌ Invalid numeric values")
         elif choice == "5":
             clear_terminal()
+            print("📦 Update Product")
+            print("=" * 40)
+            print("📋 Current Products:")
+            cli.list_products()
+            print("\n" + "=" * 40)
+            product_id = input("Product ID: ").strip()
+            print("\n📋 Update Fields (press Enter to skip):")
+            brand_id = input("Brand ID [Enter to skip]: ").strip() or None
+            product_name = input("Product Name [Enter to skip]: ").strip() or None
+            market_price = input("Market Price [Enter to skip]: ").strip() or None
+            discount_percent = input("Discount % [Enter to skip]: ").strip() or None
+            quantity = input("Quantity [Enter to skip]: ").strip() or None
+            description = input("Description [Enter to skip]: ").strip() or None
+            
+            update_data = {}
+            if brand_id:
+                try:
+                    update_data["brand_id"] = int(brand_id)
+                except ValueError:
+                    print("❌ Invalid brand ID")
+                    continue
+            if product_name:
+                update_data["product_name"] = product_name
+            if market_price:
+                try:
+                    update_data["market_price"] = float(market_price)
+                except ValueError:
+                    print("❌ Invalid market price")
+                    continue
+            if discount_percent:
+                try:
+                    update_data["discount_percent"] = float(discount_percent)
+                except ValueError:
+                    print("❌ Invalid discount percentage")
+                    continue
+            if quantity:
+                try:
+                    update_data["quantity"] = int(quantity)
+                except ValueError:
+                    print("❌ Invalid quantity")
+                    continue
+            if description:
+                update_data["description"] = description
+            
+            if update_data:
+                try:
+                    cli.update_product(int(product_id), **update_data)
+                except ValueError:
+                    print("❌ Invalid product ID")
+            else:
+                print("❌ No fields to update")
+        elif choice == "6":
+            clear_terminal()
             print("🏷️ Available Brands")
             print("=" * 40)
             cli.list_brands()
-        elif choice == "6":
+        elif choice == "7":
             clear_terminal()
             print("🏷️ Create New Brand")
             print("=" * 40)
@@ -613,10 +717,19 @@ def order_management_loop():
             cli.list_orders()
         elif choice == "2":
             clear_terminal()
+            print("📋 Search Orders")
+            print("=" * 40)
+            print("Enter search criteria (press Enter to skip):")
+            print()
+            
             user_id = input("Filter by User ID [Enter for all]: ").strip() or None
             status = input("Filter by Status [Enter for all]: ").strip() or None
+            search = input("Search by customer name/email [Enter for none]: ").strip() or None
+            date_from = input("Date from (YYYY-MM-DD) [Enter for none]: ").strip() or None
+            date_to = input("Date to (YYYY-MM-DD) [Enter for none]: ").strip() or None
+            
             try:
-                cli.list_orders(int(user_id) if user_id else None, status)
+                cli.list_orders(int(user_id) if user_id else None, status, search, date_from, date_to)
             except ValueError:
                 print("❌ Invalid user ID")
         elif choice == "3":

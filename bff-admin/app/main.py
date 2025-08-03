@@ -24,6 +24,7 @@ class ProductCreateRequest(BaseModel):
     description: Optional[str] = None
     market_price: float
     discount_percent: float = 0.0
+    quantity: int
 
 class BrandCreateRequest(BaseModel):
     brand_name: str
@@ -252,6 +253,7 @@ def get_all_orders(
     status: Optional[str] = Query(None, description="Filter by order status"),
     date_from: Optional[str] = Query(None, description="Filter orders from date (YYYY-MM-DD)"),
     date_to: Optional[str] = Query(None, description="Filter orders to date (YYYY-MM-DD)"),
+    search: Optional[str] = Query(None, description="Search by customer name or email"),
     limit: Optional[int] = Query(50, description="Number of results to return"),
     offset: Optional[int] = Query(0, description="Number of results to skip"),
     current_admin: dict = Depends(get_current_admin)
@@ -262,6 +264,7 @@ def get_all_orders(
             "status": status,
             "date_from": date_from,
             "date_to": date_to,
+            "search": search,
             "limit": limit,
             "offset": offset
         }
