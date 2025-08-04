@@ -77,16 +77,26 @@ async def login(login_data: LoginRequest):
             WHERE u.email = %s
         """
         result = query_db(conn, query, (login_data.email,))
-        close_db(conn)
         
         if not result:
+            close_db(conn)
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
         user = result[0]
         
         # Verify password
         if not verify_password(login_data.password, user["password"]):
+            close_db(conn)
             raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        # Clean up any expired refresh tokens for this user
+        cleanup_query = """
+            DELETE FROM refresh_tokens 
+            WHERE user_id = %s AND expires_at <= NOW()
+        """
+        execute_db(conn, cleanup_query, (user["user_id"],))
+        
+        close_db(conn)
         
         # Return user data
         return {
@@ -1296,6 +1306,39 @@ async def get_sales_analytics(
                 for customer in top_customers
             ]
         }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/users/clear-refresh-tokens")
+async def clear_user_refresh_tokens(user_id: int):
+    try:
+        conn = connect_user_db()
+        
+        # Delete all refresh tokens for the user
+        query = "DELETE FROM refresh_tokens WHERE user_id = %s"
+        execute_db(conn, query, (user_id,))
+        close_db(conn)
+        
+        return {"message": "All refresh tokens cleared for user"}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/users/cleanup-expired-tokens")
+async def cleanup_expired_tokens():
+    try:
+        conn = connect_user_db()
+        
+        # Delete all expired refresh tokens
+        cleanup_query = """
+            DELETE FROM refresh_tokens 
+            WHERE expires_at <= NOW()
+        """
+        execute_db(conn, cleanup_query)
+        close_db(conn)
+        
+        return {"message": "Expired refresh tokens cleaned up"}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

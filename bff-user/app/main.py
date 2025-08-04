@@ -110,7 +110,15 @@ def login(login_data: LoginRequest):
     try:
         # Call IDP service for authentication
         response = requests.post("http://idp-service:8080/login", json=login_data.dict())
-        return response.json()
+        
+        # Check if the response is successful
+        if response.status_code == 200:
+            return response.json()
+        else:
+            # Raise HTTPException with the error from IDP service
+            error_detail = response.json().get("detail", "Authentication failed")
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
+        
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
@@ -119,7 +127,15 @@ def refresh_token(refresh_data: RefreshRequest):
     try:
         # Call IDP service for token refresh
         response = requests.post("http://idp-service:8080/refresh", json=refresh_data.dict())
-        return response.json()
+        
+        # Check if the response is successful
+        if response.status_code == 200:
+            return response.json()
+        else:
+            # Raise HTTPException with the error from IDP service
+            error_detail = response.json().get("detail", "Authentication failed")
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
+        
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 
@@ -129,7 +145,15 @@ def verify_token(authorization: str = Header(None)):
         # Call IDP service to verify token
         response = requests.post("http://idp-service:8080/verify", 
                                headers={"Authorization": authorization})
-        return response.json()
+        
+        # Check if the response is successful
+        if response.status_code == 200:
+            return response.json()
+        else:
+            # Raise HTTPException with the error from IDP service
+            error_detail = response.json().get("detail", "Token verification failed")
+            raise HTTPException(status_code=response.status_code, detail=error_detail)
+        
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Authentication service unavailable")
 

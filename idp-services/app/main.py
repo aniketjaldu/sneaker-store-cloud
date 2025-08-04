@@ -83,6 +83,14 @@ async def login(login_data: LoginRequest):
         if response.status_code == 200:
             user_data = response.json()
             
+            # Clear any existing refresh tokens for this user to prevent conflicts
+            try:
+                requests.post(f"http://user-service:8080/users/clear-refresh-tokens", 
+                            json={"user_id": user_data["user_id"]})
+            except requests.RequestException:
+                # Continue even if cleanup fails
+                pass
+            
             # Create tokens
             access_token = create_access_token(user_data["user_id"], user_data["email"], user_data["role"])
             refresh_token = create_refresh_token(user_data["user_id"], user_data["email"], user_data["role"])
@@ -193,6 +201,14 @@ async def admin_login(login_data: LoginRequest):
         
         if response.status_code == 200:
             user_data = response.json()
+            
+            # Clear any existing refresh tokens for this user to prevent conflicts
+            try:
+                requests.post(f"http://user-service:8080/users/clear-refresh-tokens", 
+                            json={"user_id": user_data["user_id"]})
+            except requests.RequestException:
+                # Continue even if cleanup fails
+                pass
             
             # Create tokens
             access_token = create_access_token(user_data["user_id"], user_data["email"], "admin")
