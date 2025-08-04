@@ -39,7 +39,7 @@ The Sneaker Spot is a full-stack e-commerce application that enables users to br
 ## Design Architecture
 
 The project follows a microservices architecture with the following components:
-
+![Service Architecture](./images/image.png)
 ### Service Details
 
 #### Frontend Services
