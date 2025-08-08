@@ -1,5 +1,7 @@
 # The Sneaker Spot - Cloud-Based E-commerce Platform
 
+Group: Aniket Jaldu, Denis Le, Jovaughn Oliver, Timmy Tran
+
 ## Introduction
 
 The Sneaker Spot is a comprehensive cloud-based e-commerce platform designed for sneaker retail. Built with modern microservices architecture, it provides a scalable, secure, and user-friendly solution for both customers and administrators. The platform features a React-based frontend, multiple backend services, and a robust authentication system.
